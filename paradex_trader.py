@@ -413,12 +413,12 @@ class ParadexTrader:
             await asyncio.sleep(0.3)
 
             # 使用 fill 方法（推荐方式）
-            await size_input.fill('')  # 先清空
-            await asyncio.sleep(0.2)
-            await size_input.fill(str(size))  # 再填充
-            await asyncio.sleep(0.3)
-
-            # 验证输入
+            # await size_input.fill('')  # 先清空
+            # await asyncio.sleep(0.2)
+            # await size_input.fill(str(size))  # 再填充
+            # await asyncio.sleep(0.3)
+            #
+            # # 验证输入
             actual_value = await size_input.input_value()
             print(f"  第一次尝试结果: {actual_value}")
 
