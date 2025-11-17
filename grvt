@@ -1,0 +1,1648 @@
+"""
+GRVT 交易机器人核心功能类
+包含所有交易相关的功能函数
+"""
+
+import asyncio
+from typing import Optional,Tuple
+from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError, expect
+
+
+class GrvtTradingBot:
+    def __init__(self, page: Page):
+        self.page = page
+        self.timeout = 10000  # 10秒超时
+
+    # ==================== 价格获取相关 ====================
+
+    async def get_orderbook_bid_price(self, max_attempts: int = 3) -> Optional[float]:
+        """
+        从订单簿获取最高买价（Bid）- 绿色价格
+
+        Args:
+            max_attempts: 最大尝试次数
+
+        Returns:
+            float: 最高买价，如果获取失败返回 None
+        """
+        for attempt in range(max_attempts):
+            try:
+                print(f"从订单簿获取买价 (第 {attempt + 1}/{max_attempts} 次)...")
+
+                # 等待绿色价格元素
+                await self.page.wait_for_selector(
+                    '.txt-feature-green',
+                    state="visible",
+                    timeout=10000
+                )
+
+                await asyncio.sleep(0.5)
+
+                # 获取所有可见的绿色价格（买单）
+                # 排除隐藏元素（class 包含 d-none）
+                bid_rows = self.page.locator(
+                    'div.style_row__q_Oum:not(.d-none) .txt-feature-green'
+                ).first
+
+                if await bid_rows.count() > 0:
+                    price_text = await bid_rows.text_content()
+                    price_text = price_text.strip().replace(',', '')
+
+                    if price_text and price_text != '-':
+                        price = float(price_text)
+                        if 0 < price < 10000000:
+                            print(f"✓ 最高买价 (Bid): {price}")
+                            return price
+
+                print("  未找到有效买价，重试...")
+                await asyncio.sleep(1)
+
+            except Exception as e:
+                print(f"  获取买价出错: {e}")
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(1)
+
+        print(f"✗ 获取买价失败")
+        return None
+
+    async def get_orderbook_ask_price(self, max_attempts: int = 3) -> Optional[float]:
+        """
+        从订单簿获取最低卖价（Ask）- 红色价格
+
+        Args:
+            max_attempts: 最大尝试次数
+
+        Returns:
+            float: 最低卖价，如果获取失败返回 None
+        """
+        for attempt in range(max_attempts):
+            try:
+                print(f"从订单簿获取卖价 (第 {attempt + 1}/{max_attempts} 次)...")
+
+                # 等待红色价格元素
+                await self.page.wait_for_selector(
+                    '.txt-feature-red',
+                    state="visible",
+                    timeout=10000
+                )
+
+                await asyncio.sleep(0.5)
+
+                # 获取所有可见的红色价格（卖单）
+                # 卖单从上到下是从低到高，所以第一个就是最低卖价
+                # 排除隐藏元素（class 包含 d-none）
+                ask_rows = self.page.locator(
+                    'div.style_row__q_Oum:not(.d-none) .txt-feature-red'
+                ).first
+
+                if await ask_rows.count() > 0:
+                    price_text = await ask_rows.text_content()
+                    price_text = price_text.strip().replace(',', '')
+
+                    if price_text and price_text != '-':
+                        price = float(price_text)
+                        if 0 < price < 10000000:
+                            print(f"✓ 最低卖价 (Ask): {price}")
+                            return price
+
+                print("  未找到有效卖价，重试...")
+                await asyncio.sleep(1)
+
+            except Exception as e:
+                print(f"  获取卖价出错: {e}")
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(1)
+
+        print(f"✗ 获取卖价失败")
+        return None
+
+    async def get_orderbook_prices(self, max_attempts: int = 3) -> Tuple[Optional[float], Optional[float]]:
+        """
+        从订单簿获取最高买价和最低卖价
+
+        Args:
+            max_attempts: 最大尝试次数
+
+        Returns:
+            Tuple[Optional[float], Optional[float]]: (最高买价, 最低卖价)
+        """
+        for attempt in range(max_attempts):
+            try:
+                print(f"尝试从订单簿获取价格 (第 {attempt + 1}/{max_attempts} 次)...")
+
+                # 等待订单簿加载
+                await self.page.wait_for_selector(
+                    '.txt-feature-green, .txt-feature-red',
+                    state="visible",
+                    timeout=10000
+                )
+
+                await asyncio.sleep(1)
+
+                # 获取最低卖价（红色，可见的第一个）
+                ask_price = None
+                ask_elements = self.page.locator('.txt-feature-red').filter(
+                    has_not=self.page.locator('.d-none')
+                )
+
+                ask_count = await ask_elements.count()
+                print(f"  找到 {ask_count} 个可见卖单")
+
+                for i in range(min(ask_count, 5)):  # 检查前5个
+                    try:
+                        element = ask_elements.nth(i)
+                        # 确保元素可见
+                        if await element.is_visible():
+                            price_text = await element.text_content()
+                            price_text = price_text.strip().replace(',', '')
+
+                            # 验证是否为有效价格
+                            if price_text and price_text != '-':
+                                price = float(price_text)
+                                if 0 < price < 10000000:
+                                    ask_price = price
+                                    print(f"✓ 最低卖价 (Ask): {ask_price}")
+                                    break
+                    except:
+                        continue
+
+                # 获取最高买价（绿色，可见的第一个）
+                bid_price = None
+                bid_elements = self.page.locator('.txt-feature-green').filter(
+                    has_not=self.page.locator('.d-none')
+                )
+
+                bid_count = await bid_elements.count()
+                print(f"  找到 {bid_count} 个可见买单")
+
+                for i in range(min(bid_count, 5)):  # 检查前5个
+                    try:
+                        element = bid_elements.nth(i)
+                        # 确保元素可见
+                        if await element.is_visible():
+                            price_text = await element.text_content()
+                            price_text = price_text.strip().replace(',', '')
+
+                            # 验证是否为有效价格
+                            if price_text and price_text != '-':
+                                price = float(price_text)
+                                if 0 < price < 10000000:
+                                    bid_price = price
+                                    print(f"✓ 最高买价 (Bid): {bid_price}")
+                                    break
+                    except:
+                        continue
+
+                # 如果都获取成功，返回结果
+                if bid_price is not None and ask_price is not None:
+                    spread = ask_price - bid_price
+                    spread_pct = (spread / bid_price) * 100
+                    print(f"✓ 价差: {spread:.2f} ({spread_pct:.3f}%)")
+                    return bid_price, ask_price
+
+                print("  未能获取有效价格，重试...")
+                await asyncio.sleep(1)
+
+            except Exception as e:
+                print(f"  获取价格出错: {e}")
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(1)
+
+        print(f"✗ 获取订单簿价格失败")
+        return None, None
+
+    def calculate_mid_price(self, highest_bid, lowest_ask):
+        """
+        计算中间价
+        """
+        if highest_bid and lowest_ask:
+            mid_price = round((highest_bid + lowest_ask) / 2, 1)
+            print(f"中间价 (Mid): {mid_price}")
+            return mid_price
+        print("无法计算中间价")
+        return None
+
+    # ==================== 杠杆设置 ====================
+
+    async def get_current_leverage(self):
+        """获取当前杠杆倍数"""
+        try:
+            # 查找显示杠杆的元素
+            leverage_display = self.page.locator('span:has-text("Leverage")').locator(
+                'xpath=following-sibling::span').first
+            leverage_text = await leverage_display.text_content()
+            # 提取数字，例如 "10x" -> 10
+            leverage = int(leverage_text.replace('x', '').strip())
+            print(f"当前杠杆: {leverage}x")
+            return leverage
+        except Exception as e:
+            print(f"❌ 获取当前杠杆失败: {e}")
+            return None
+
+    async def set_leverage(self, leverage):
+        """
+        设置杠杆倍数
+        leverage: 目标杠杆倍数 (1-50)
+        """
+        print("\n" + "=" * 60)
+        print(f"⚙️ 设置杠杆为 {leverage}x")
+        print("=" * 60)
+
+        try:
+            # 1. 点击 Leverage 区域打开对话框
+            leverage_button = self.page.locator('span:has-text("Leverage")').locator(
+                'xpath=ancestor::span[contains(@class, "text-field_prefix")]')
+            await leverage_button.wait_for(state="visible", timeout=self.timeout)
+            await leverage_button.click()
+            await asyncio.sleep(1)
+
+            # 验证对话框是否打开
+            dialog = self.page.locator('.style_contentWrapper__JrKWn:has-text("Adjust Leverage")')
+            if await dialog.count() == 0:
+                print("❌ 未能打开杠杆设置对话框")
+                return False
+
+            print("✓ 杠杆设置对话框已打开")
+
+            # 2. 在输入框中输入杠杆值
+            leverage_input = dialog.locator('input[data-sentry-component="InputLeverage"]')
+            await leverage_input.wait_for(state="visible", timeout=self.timeout)
+
+            # 清空并输入新值
+            await leverage_input.click(click_count=3)  # 全选
+            await leverage_input.press("Backspace")
+            await asyncio.sleep(0.3)
+            await leverage_input.fill(f"{leverage}x")
+            print(f"✓ 已输入杠杆值: {leverage}x")
+            await asyncio.sleep(0.5)
+
+            # 3. 点击 Confirm 按钮
+            confirm_button = dialog.locator('button:has-text("Confirm")')
+            await confirm_button.click()
+            print("✓ 已确认杠杆设置")
+            await asyncio.sleep(1)
+
+            # 4. 验证是否设置成功
+            current_leverage = await self.get_current_leverage()
+            if current_leverage == leverage:
+                print(f"✅ 杠杆已成功设置为 {leverage}x")
+                return True
+            else:
+                print(f"⚠️ 杠杆设置可能未成功，当前值: {current_leverage}x")
+                return False
+
+        except Exception as e:
+            print(f"❌ 设置杠杆时出错: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    # ==================== 订单类型切换 ====================
+
+    async def switch_to_limit_order(self):
+        """切换到限价单"""
+        try:
+            # 在右侧交易面板中查找 Limit 标签（使用更精确的选择器）
+            limit_tab = self.page.locator('[data-sentry-component="TypeTabs"]').locator('text="Limit"').first
+            await limit_tab.wait_for(state="visible", timeout=self.timeout)
+
+            # 检查是否已经是激活状态
+            parent = limit_tab.locator('xpath=..')
+            class_name = await parent.get_attribute('class')
+
+            if 'active' not in class_name.lower():
+                await limit_tab.click()
+                await asyncio.sleep(0.5)
+                print("✓ 已切换到限价单")
+            else:
+                print("✓ 已经是限价单模式")
+
+            return True
+        except Exception as e:
+            print(f"❌ 切换到限价单失败: {e}")
+            return False
+
+    async def switch_to_market_order(self):
+        """切换到市价单"""
+        try:
+            # 在右侧交易面板中查找 Market 标签（使用更精确的选择器）
+            market_tab = self.page.locator('[data-sentry-component="TypeTabs"]').locator('text="Market"').first
+            await market_tab.wait_for(state="visible", timeout=self.timeout)
+
+            # 检查是否已经是激活状态
+            parent = market_tab.locator('xpath=..')
+            class_name = await parent.get_attribute('class')
+
+            if 'active' not in class_name.lower():
+                await market_tab.click()
+                await asyncio.sleep(0.5)
+                print("✓ 已切换到市价单")
+            else:
+                print("✓ 已经是市价单模式")
+
+            return True
+        except Exception as e:
+            print(f"❌ 切换到市价单失败: {e}")
+            return False
+
+    # ==================== 填写订单表单 ====================
+
+    async def fill_limit_order_form(self, price, quantity=0.002):
+        """
+        填写限价单表单（价格+数量）
+        """
+        try:
+            print(f"填写限价单 - 价格: {price}, 数量: {quantity}")
+
+            # 填写价格
+            price_input = self.page.locator('input[placeholder="Price"]')
+            await price_input.wait_for(state="visible", timeout=self.timeout)
+            await price_input.click(click_count=3)
+            await price_input.press("Backspace")
+            await asyncio.sleep(0.3)
+            await price_input.fill(str(price))
+            print(f"✓ 已填入价格: {price}")
+            await asyncio.sleep(0.5)
+
+            # 填写数量
+            quantity_input = self.page.locator('input[placeholder="Quantity"]')
+            await quantity_input.wait_for(state="visible", timeout=self.timeout)
+            await quantity_input.click(click_count=3)
+            await quantity_input.press("Backspace")
+            await asyncio.sleep(0.3)
+            await quantity_input.fill(str(quantity))
+            print(f"✓ 已填入数量: {quantity}")
+            await asyncio.sleep(0.5)
+
+            return True
+
+        except Exception as e:
+            print(f"❌ 填写限价单表单时出错: {e}")
+            return False
+
+    async def fill_market_order_form(self, quantity=0.002):
+        """
+        填写市价单表单（只需要数量）
+        """
+        try:
+            print(f"填写市价单 - 数量: {quantity}")
+
+            # 市价单只需要填写数量
+            quantity_input = self.page.locator('input[placeholder="Quantity"]')
+            await quantity_input.wait_for(state="visible", timeout=self.timeout)
+            await quantity_input.click(click_count=3)
+            await quantity_input.press("Backspace")
+            await asyncio.sleep(0.3)
+            await quantity_input.fill(str(quantity))
+            print(f"✓ 已填入数量: {quantity}")
+            await asyncio.sleep(0.5)
+
+            return True
+
+        except Exception as e:
+            print(f"❌ 填写市价单表单时出错: {e}")
+            return False
+
+    # ==================== 点击下单按钮 ====================
+
+    async def click_buy_long(self):
+        """点击 Buy/Long 按钮"""
+        try:
+            print("点击 Buy/Long 按钮...")
+
+            buy_button = self.page.locator('button:has-text("Buy / Long")')
+            await buy_button.wait_for(state="visible", timeout=self.timeout)
+
+            await buy_button.click()
+            print("✓ 已点击 Buy/Long 按钮")
+            await asyncio.sleep(2)
+
+            # 检查确认弹窗
+            try:
+                confirm_button = self.page.locator('button:has-text("Confirm"), button:has-text("确认")')
+                if await confirm_button.count() > 0:
+                    await confirm_button.first.click()
+                    print("✓ 已确认订单")
+                    await asyncio.sleep(1)
+            except:
+                pass
+
+            return True
+
+        except Exception as e:
+            print(f"❌ 点击买入按钮时出错: {e}")
+            return False
+
+    async def click_sell_short(self):
+        """点击 Sell/Short 按钮"""
+        try:
+            print("点击 Sell/Short 按钮...")
+
+            sell_button = self.page.locator('button:has-text("Sell / Short")')
+            await sell_button.wait_for(state="visible", timeout=self.timeout)
+
+            await sell_button.click()
+            print("✓ 已点击 Sell/Short 按钮")
+            await asyncio.sleep(2)
+
+            # 检查确认弹窗
+            try:
+                confirm_button = self.page.locator('button:has-text("Confirm"), button:has-text("确认")')
+                if await confirm_button.count() > 0:
+                    await confirm_button.first.click()
+                    print("✓ 已确认订单")
+                    await asyncio.sleep(1)
+            except:
+                pass
+
+            return True
+
+        except Exception as e:
+            print(f"❌ 点击卖出按钮时出错: {e}")
+            return False
+
+    # ==================== 市价开仓 ====================
+
+    async def market_buy_long(self, quantity=0.002):
+        """市价做多"""
+        print("\n" + "=" * 60)
+        print("📈 市价做多")
+        print("=" * 60)
+
+        # 1. 切换到市价单
+        if not await self.switch_to_market_order():
+            return False
+
+        # 2. 只填写数量（市价单不需要价格）
+        if not await self.fill_market_order_form(quantity):
+            return False
+
+        # 3. 点击买入
+        if not await self.click_buy_long():
+            return False
+
+        print("✅ 市价做多订单已提交")
+        return True
+
+    async def market_sell_short(self, quantity=0.002):
+        """市价做空"""
+        print("\n" + "=" * 60)
+        print("📉 市价做空")
+        print("=" * 60)
+
+        # 1. 切换到市价单
+        if not await self.switch_to_market_order():
+            return False
+
+        # 2. 只填写数量（市价单不需要价格）
+        if not await self.fill_market_order_form(quantity):
+            return False
+
+        # 3. 点击卖出
+        if not await self.click_sell_short():
+            return False
+
+        print("✅ 市价做空订单已提交")
+        return True
+
+    # ==================== 限价开仓 ====================
+
+    async def limit_buy_long(self, price=None, quantity=0.002):
+        """限价做多"""
+        print("\n" + "=" * 60)
+        print("📈 限价做多")
+        print("=" * 60)
+
+        # 如果没有指定价格，使用中间价
+        if price is None:
+            bid, ask = await self.get_order_book_prices()
+            if bid and ask:
+                price = self.calculate_mid_price(bid, ask)
+            else:
+                print("❌ 无法获取价格")
+                return False
+
+        # 1. 切换到限价单
+        if not await self.switch_to_limit_order():
+            return False
+
+        # 2. 填写价格和数量
+        if not await self.fill_limit_order_form(price, quantity):
+            return False
+
+        # 3. 点击买入
+        if not await self.click_buy_long():
+            return False
+
+        print("✅ 限价做多订单已提交")
+        return True
+
+    async def limit_sell_short(self, price=None, quantity=0.002):
+        """限价做空"""
+        print("\n" + "=" * 60)
+        print("📉 限价做空")
+        print("=" * 60)
+
+        # 如果没有指定价格，使用中间价
+        if price is None:
+            bid, ask = await self.get_order_book_prices()
+            if bid and ask:
+                price = self.calculate_mid_price(bid, ask)
+            else:
+                print("❌ 无法获取价格")
+                return False
+
+        # 1. 切换到限价单
+        if not await self.switch_to_limit_order():
+            return False
+
+        # 2. 填写价格和数量
+        if not await self.fill_limit_order_form(price, quantity):
+            return False
+
+        # 3. 点击卖出
+        if not await self.click_sell_short():
+            return False
+
+        print("✅ 限价做空订单已提交")
+        return True
+
+    # ==================== 持仓查询 ====================
+
+    async def check_positions(self, show_details=True):
+        """
+        检查 Positions 标签页中是否有持仓
+        返回: 持仓数量
+        """
+        try:
+            if show_details:
+                print("检查持仓状态...")
+
+            # 点击 Positions 标签
+            positions_tab = self.page.locator('div:has-text("Positions")').first
+            await positions_tab.wait_for(state="visible", timeout=self.timeout)
+            await positions_tab.click()
+            await asyncio.sleep(2)
+
+            # 检查是否显示 "No results"
+            no_results = self.page.locator('div:has-text("No results")')
+
+            if await no_results.count() > 0:
+                if show_details:
+                    print("ℹ️ 当前没有持仓")
+                return 0
+            else:
+                # 获取持仓行
+                position_rows = await self.page.locator(
+                    '[data-sentry-component="TablePositions"] .style_tableRow__gbjWO').all()
+                position_count = len(position_rows)
+
+                if position_count > 0:
+                    if show_details:
+                        print(f"✓ 持仓数量: {position_count}")
+                        print("\n持仓详情:")
+
+                        # 打印每个持仓的详细信息
+                        for i, row in enumerate(position_rows, 1):
+                            try:
+                                # 提取持仓信息
+                                cells = await row.locator('[data-sentry-element="CellWrapper"]').all()
+                                if len(cells) >= 5:
+                                    product = await cells[0].text_content()
+                                    quantity = await cells[1].text_content()
+                                    value = await cells[2].text_content()
+                                    entry_price = await cells[3].text_content()
+                                    mark_price = await cells[4].text_content()
+
+                                    print(f"\n  持仓 {i}:")
+                                    print(f"    产品: {product.strip()}")
+                                    print(f"    数量: {quantity.strip()}")
+                                    print(f"    价值: {value.strip()}")
+                                    print(f"    入场价: {entry_price.strip()}")
+                                    print(f"    标记价: {mark_price.strip()}")
+                            except:
+                                pass
+
+                    return position_count
+                else:
+                    if show_details:
+                        print("⚠️ 有持仓但无法准确计数")
+                    return -1
+
+        except Exception as e:
+            print(f"❌ 检查持仓时出错: {e}")
+            return -1
+
+    async def get_position_list(self):
+        """获取持仓列表（带详细信息）"""
+        try:
+            # 切换到 Positions 标签
+            positions_tab = self.page.locator('div:has-text("Positions")').first
+            await positions_tab.click()
+            await asyncio.sleep(2)
+
+            # 获取持仓行
+            position_rows = await self.page.locator(
+                '[data-sentry-component="TablePositions"] .style_tableRow__gbjWO').all()
+
+            positions = []
+            for row in position_rows:
+                try:
+                    cells = await row.locator('[data-sentry-element="CellWrapper"]').all()
+                    if len(cells) >= 5:
+                        position_info = {
+                            'product': (await cells[0].text_content()).strip(),
+                            'quantity': (await cells[1].text_content()).strip(),
+                            'value': (await cells[2].text_content()).strip(),
+                            'entry_price': (await cells[3].text_content()).strip(),
+                            'mark_price': (await cells[4].text_content()).strip(),
+                            'row_element': row
+                        }
+                        positions.append(position_info)
+                except:
+                    continue
+
+            return positions
+
+        except Exception as e:
+            print(f"❌ 获取持仓列表时出错: {e}")
+            return []
+
+    # ==================== 平仓相关 ====================
+
+    async def click_limit_close_button(self, position_row=None):
+        """
+        点击指定持仓的 Limit 平仓按钮
+        如果 position_row 为 None，则点击第一个持仓的按钮
+        """
+        try:
+            if position_row:
+                limit_button = position_row.locator('button:has-text("Limit")')
+            else:
+                limit_button = self.page.locator('button:has-text("Limit")').first
+
+            await limit_button.wait_for(state="visible", timeout=self.timeout)
+            await limit_button.click()
+            await asyncio.sleep(1)
+
+            # 验证对话框是否打开
+            close_dialog = self.page.locator('.style_contentWrapper__JrKWn')
+            if await close_dialog.count() > 0:
+                print("✓ 平仓对话框已打开")
+                return True
+            else:
+                print("⚠️ 未检测到平仓对话框")
+                return False
+
+        except Exception as e:
+            print(f"❌ 打开平仓对话框时出错: {e}")
+            return False
+
+    async def click_market_close_button(self, position_row=None):
+        """点击 Market 平仓按钮"""
+        try:
+            if position_row:
+                market_button = position_row.locator('button:has-text("Market")')
+            else:
+                market_button = self.page.locator('button:has-text("Market")').first
+
+            await market_button.wait_for(state="visible", timeout=self.timeout)
+            await market_button.click()
+            await asyncio.sleep(1)
+
+            # 验证对话框是否打开
+            close_dialog = self.page.locator('.style_contentWrapper__JrKWn')
+            if await close_dialog.count() > 0:
+                print("✓ 市价平仓对话框已打开")
+                return True
+            else:
+                print("⚠️ 未检测到平仓对话框")
+                return False
+
+        except Exception as e:
+            print(f"❌ 打开市价平仓对话框时出错: {e}")
+            return False
+
+    async def fill_limit_close_form(self, price):
+        """
+        填写限价平仓表单
+        """
+        try:
+            print(f"填写限价平仓价格: {price}")
+            await asyncio.sleep(1)
+
+            # 填写价格
+            order_price_input = self.page.locator('input[placeholder="Enter Order price"]')
+            if await order_price_input.count() > 0:
+                await order_price_input.click(click_count=3)
+                await order_price_input.press("Backspace")
+                await asyncio.sleep(0.3)
+                await order_price_input.fill(str(price))
+                print(f"✓ 已填入平仓价格: {price}")
+                await asyncio.sleep(0.5)
+
+            # 数量已自动填充，无需修改
+            return True
+
+        except Exception as e:
+            print(f"❌ 填写平仓表单时出错: {e}")
+            return False
+
+    async def confirm_close_position(self):
+        """点击确认按钮关闭持仓"""
+        try:
+            print("点击确认按钮...")
+
+            confirm_button = self.page.locator('.style_contentWrapper__JrKWn button:has-text("Confirm")')
+            await confirm_button.wait_for(state="visible", timeout=self.timeout)
+
+            await confirm_button.click()
+            print("✓ 已点击确认按钮")
+            await asyncio.sleep(2)
+
+            return True
+
+        except Exception as e:
+            print(f"❌ 点击确认按钮时出错: {e}")
+            return False
+
+    async def market_close_position(self, position_index=0):
+        """
+        市价平仓指定持仓
+        position_index: 持仓索引（0表示第一个）
+        """
+        print("\n" + "=" * 60)
+        print("💰 市价平仓")
+        print("=" * 60)
+
+        # 获取持仓列表
+        positions = await self.get_position_list()
+
+        if not positions:
+            print("❌ 没有找到持仓")
+            return False
+
+        if position_index >= len(positions):
+            print(f"❌ 持仓索引 {position_index} 超出范围")
+            return False
+
+        position = positions[position_index]
+        print(f"正在平仓: {position['product']} - 数量: {position['quantity']}")
+
+        # 1. 点击 Market 按钮打开对话框
+        if not await self.click_market_close_button(position['row_element']):
+            return False
+
+        # 2. 市价平仓对话框中，数量已自动填充，直接确认即可
+        if not await self.confirm_close_position():
+            return False
+
+        print("✅ 市价平仓订单已提交")
+        await asyncio.sleep(2)
+
+        return True
+
+    async def limit_close_position(self, position_index=0, price=None):
+        """
+        限价平仓指定持仓
+        position_index: 持仓索引（0表示第一个）
+        price: 平仓价格（None表示使用中间价）
+        """
+        print("\n" + "=" * 60)
+        print("💰 限价平仓")
+        print("=" * 60)
+
+        # 如果没有指定价格，使用中间价
+        if price is None:
+            bid, ask = await self.get_order_book_prices()
+            if bid and ask:
+                price = self.calculate_mid_price(bid, ask)
+            else:
+                print("❌ 无法获取价格")
+                return False
+
+        # 获取持仓列表
+        positions = await self.get_position_list()
+
+        if not positions:
+            print("❌ 没有找到持仓")
+            return False
+
+        if position_index >= len(positions):
+            print(f"❌ 持仓索引 {position_index} 超出范围")
+            return False
+
+        position = positions[position_index]
+        print(f"正在平仓: {position['product']} - 数量: {position['quantity']}")
+
+        # 1. 点击 Limit 按钮打开对话框
+        if not await self.click_limit_close_button(position['row_element']):
+            return False
+
+        # 2. 填写价格
+        if not await self.fill_limit_close_form(price):
+            return False
+
+        # 3. 确认平仓
+        if not await self.confirm_close_position():
+            return False
+
+        print("✅ 限价平仓订单已提交")
+        await asyncio.sleep(2)
+
+        return True
+
+    async def close_all_positions_market(self):
+        """市价平仓所有持仓"""
+        print("\n" + "=" * 60)
+        print("💰 市价平仓所有持仓")
+        print("=" * 60)
+
+        # 点击 Close all positions 按钮
+        try:
+            close_all_button = self.page.locator('button:has-text("Close all positions")')
+            if await close_all_button.count() > 0:
+                await close_all_button.click()
+                await asyncio.sleep(1)
+
+                # 确认对话框
+                confirm_button = self.page.locator('button:has-text("Confirm")')
+                if await confirm_button.count() > 0:
+                    await confirm_button.click()
+                    print("✅ 已提交平仓所有持仓的订单")
+                    await asyncio.sleep(2)
+                    return True
+            else:
+                print("⚠️ 未找到 Close all positions 按钮")
+                return False
+
+        except Exception as e:
+            print(f"❌ 平仓所有持仓时出错: {e}")
+            return False
+
+    # ==================== 订单查询 ====================
+
+    async def check_open_orders(self, show_details=True):
+        """检查挂单"""
+        try:
+            if show_details:
+                print("检查挂单...")
+
+            # 点击 Open orders 标签
+            open_orders_tab = self.page.locator('div:has-text("Open orders")').first
+            await open_orders_tab.click()
+            await asyncio.sleep(2)
+
+            # 检查是否有挂单
+            no_results = self.page.locator('div:has-text("No results")')
+
+            if await no_results.count() > 0:
+                if show_details:
+                    print("ℹ️ 当前没有挂单")
+                return 0
+            else:
+                # 从标签文本中提取数量
+                try:
+                    tab_text = await open_orders_tab.text_content()
+                    if '(' in tab_text and ')' in tab_text:
+                        count_str = tab_text.split('(')[1].split(')')[0]
+                        count = int(count_str)
+                        if show_details:
+                            print(f"✓ 当前有 {count} 个挂单")
+                        return count
+                    else:
+                        if show_details:
+                            print("✓ 检测到挂单但无法计数")
+                        return -1
+                except:
+                    if show_details:
+                        print("✓ 检测到挂单但无法计数")
+                    return -1
+
+        except Exception as e:
+            print(f"❌ 检查挂单时出错: {e}")
+            return -1
+
+    async def cancel_order(self, order_id: str = None, row_index: int = None) -> bool:
+        """
+        取消单个订单
+
+        Args:
+            order_id: 订单ID（部分匹配即可）
+            row_index: 订单在表格中的行索引（从0开始）
+
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            print("\n" + "=" * 60)
+            print(f"开始取消订单: {order_id if order_id else f'第{row_index + 1}行'}")
+            print("=" * 60)
+
+            # 切换到未结订单标签
+            open_orders_tab = self.page.locator('div:has-text("Open orders")').first
+
+            if await open_orders_tab.count() == 0:
+                print("✗ 未找到未结订单标签")
+                return False
+
+            # 如果未选中，则点击
+            if await open_orders_tab.get_attribute('aria-selected') != 'true':
+                await open_orders_tab.click()
+                await asyncio.sleep(1)
+                print("✓ 已切换到未结订单标签")
+
+            # 等待订单面板加载
+            orders_panel = self.page.locator(
+                'div[role="tabpanel"][id*="open-orders"][data-state="active"]'
+            ).first
+
+            await expect(orders_panel).to_be_visible(timeout=5000)
+
+            # 查找订单表格行
+            table_rows = orders_panel.locator('div.style_tableRow__gbjWO')
+            row_count = await table_rows.count()
+
+            if row_count == 0:
+                print("✗ 未结订单列表为空")
+                return False
+
+            print(f"  找到 {row_count} 个未结订单")
+
+            target_row = None
+
+            # 根据参数查找目标订单行
+            if row_index is not None:
+                # 按行索引查找
+                if row_index < row_count:
+                    target_row = table_rows.nth(row_index)
+                    print(f"✓ 选择第 {row_index + 1} 行订单")
+                else:
+                    print(f"✗ 索引 {row_index} 超出范围（共 {row_count} 行）")
+                    return False
+
+            elif order_id:
+                # 按订单ID查找
+                for i in range(row_count):
+                    row = table_rows.nth(i)
+                    # 查找包含订单ID的单元格
+                    order_id_cell = row.locator('.oneline-text').first
+
+                    if await order_id_cell.count() > 0:
+                        cell_text = await order_id_cell.text_content()
+                        if order_id in cell_text:
+                            target_row = row
+                            print(f"✓ 找到订单ID匹配的订单（第 {i + 1} 行）")
+                            break
+
+                if target_row is None:
+                    print(f"✗ 未找到订单ID包含 '{order_id}' 的订单")
+                    return False
+            else:
+                print("✗ 必须指定 order_id 或 row_index")
+                return False
+
+            # 在目标行中查找 Cancel 按钮
+            cancel_button = target_row.locator('button:has-text("Cancel")').last
+
+            if await cancel_button.count() == 0:
+                print("✗ 未找到 Cancel 按钮")
+                return False
+
+            await expect(cancel_button).to_be_visible(timeout=5000)
+            await expect(cancel_button).to_be_enabled(timeout=5000)
+
+            # 滚动到按钮并点击
+            await cancel_button.scroll_into_view_if_needed()
+            await asyncio.sleep(0.3)
+
+            await cancel_button.click()
+            print("✓ 已点击 Cancel 按钮")
+
+            await asyncio.sleep(1)
+
+            # 验证订单是否已取消（检查行数是否减少）
+            await asyncio.sleep(1)
+            new_row_count = await table_rows.count()
+
+            if new_row_count < row_count:
+                print(f"✓ 订单已取消（剩余 {new_row_count} 个订单）")
+            else:
+                print("⚠️  订单可能已取消（等待确认）")
+
+            print("=" * 60)
+            print("✅ 取消订单操作完成")
+            print("=" * 60 + "\n")
+
+            return True
+
+        except Exception as e:
+            print(f"✗ 取消订单失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    async def cancel_all_orders(self) -> bool:
+        """
+        取消所有未结订单
+
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            print("\n" + "=" * 60)
+            print("开始取消所有订单")
+            print("=" * 60)
+
+            # 切换到未结订单标签
+            open_orders_tab = self.page.locator(
+                'button[role="tab"]:has-text("Open orders")'
+            ).first
+
+            if await open_orders_tab.count() == 0:
+                print("✗ 未找到未结订单标签")
+                return False
+
+            if await open_orders_tab.get_attribute('aria-selected') != 'true':
+                await open_orders_tab.click()
+                await asyncio.sleep(1)
+                print("✓ 已切换到未结订单标签")
+
+            # 等待订单面板加载
+            orders_panel = self.page.locator(
+                'div[role="tabpanel"][id*="open-orders"][data-state="active"]'
+            ).first
+
+            await expect(orders_panel).to_be_visible(timeout=5000)
+
+            # 查找 "Cancel all orders" 按钮
+            cancel_all_button = self.page.locator(
+                'button:has-text("Cancel all orders")'
+            ).first
+
+            if await cancel_all_button.count() == 0:
+                print("✗ 未找到 Cancel all orders 按钮")
+                return False
+
+            # 检查按钮是否可用
+            if not await cancel_all_button.is_enabled():
+                print("⚠️  Cancel all orders 按钮不可用（可能没有待取消的订单）")
+                return True
+
+            await expect(cancel_all_button).to_be_visible(timeout=5000)
+            await expect(cancel_all_button).to_be_enabled(timeout=5000)
+
+            # 获取当前订单数量
+            table_rows = orders_panel.locator('div.style_tableRow__gbjWO')
+            initial_count = await table_rows.count()
+            print(f"  当前有 {initial_count} 个未结订单")
+
+            # 点击按钮
+            await cancel_all_button.scroll_into_view_if_needed()
+            await asyncio.sleep(0.3)
+
+            await cancel_all_button.click()
+            print("✓ 已点击 Cancel all orders 按钮")
+
+            # 可能会有确认弹窗，需要处理
+            await asyncio.sleep(1)
+
+            # 检查是否有确认对话框
+            confirm_dialog = self.page.locator('div[role="dialog"]').first
+            if await confirm_dialog.count() > 0 and await confirm_dialog.is_visible():
+                print("  检测到确认对话框")
+
+                # 查找确认按钮（可能是 "Confirm"、"Yes"、"确认" 等）
+                confirm_btn = confirm_dialog.locator(
+                    'button:has-text("Confirm"), button:has-text("Yes"), button:has-text("确认")'
+                ).first
+
+                if await confirm_btn.count() > 0:
+                    await confirm_btn.click()
+                    print("✓ 已点击确认按钮")
+                    await asyncio.sleep(1)
+
+            # 等待并验证订单是否已全部取消
+            import time
+            end_time = time.time() + 10
+
+            while time.time() < end_time:
+                current_count = await table_rows.count()
+
+                if current_count == 0:
+                    print("✓ 所有订单已取消")
+                    break
+
+                print(f"  等待订单取消... (剩余 {current_count} 个)")
+                await asyncio.sleep(1)
+            else:
+                final_count = await table_rows.count()
+                if final_count < initial_count:
+                    print(f"✓ 部分订单已取消（剩余 {final_count} 个）")
+                else:
+                    print("⚠️  订单取消状态未确认")
+
+            print("=" * 60)
+            print("✅ 取消所有订单操作完成")
+            print("=" * 60 + "\n")
+
+            return True
+
+        except Exception as e:
+            print(f"✗ 取消所有订单失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    async def get_open_orders(self) -> list[dict]:
+        """
+        获取所有未结订单信息
+
+        Returns:
+            list: 订单列表，每个元素包含订单详细信息
+        """
+        try:
+            print("\n获取未结订单...")
+
+            # 切换到未结订单标签
+            open_orders_tab = self.page.locator(
+                'button[role="tab"]:has-text("Open orders")'
+            ).first
+
+            if await open_orders_tab.count() == 0:
+                print("✗ 未找到未结订单标签")
+                return []
+
+            if await open_orders_tab.get_attribute('aria-selected') != 'true':
+                await open_orders_tab.click()
+                await asyncio.sleep(1)
+
+            # 等待订单面板加载
+            orders_panel = self.page.locator(
+                'div[role="tabpanel"][id*="open-orders"][data-state="active"]'
+            ).first
+
+            await expect(orders_panel).to_be_visible(timeout=5000)
+
+            # 查找订单表格行
+            table_rows = orders_panel.locator('div.style_tableRow__gbjWO')
+            row_count = await table_rows.count()
+
+            if row_count == 0:
+                print("✓ 当前无未结订单")
+                return []
+
+            orders = []
+
+            for i in range(row_count):
+                try:
+                    row = table_rows.nth(i)
+                    cells = row.locator('div[data-sentry-component="Cell"]')
+
+                    # 解析订单信息
+                    order = {
+                        'row_index': i,
+                        'product': await cells.nth(0).text_content() if await cells.count() > 0 else '',
+                        'order_time': await cells.nth(1).text_content() if await cells.count() > 1 else '',
+                        'direction': await cells.nth(2).text_content() if await cells.count() > 2 else '',
+                        'order_price': await cells.nth(3).text_content() if await cells.count() > 3 else '',
+                        'filled_unfilled': await cells.nth(5).text_content() if await cells.count() > 5 else '',
+                        'order_type': await cells.nth(7).text_content() if await cells.count() > 7 else '',
+                    }
+
+                    # 获取订单ID
+                    order_id_cell = row.locator('.oneline-text').first
+                    if await order_id_cell.count() > 0:
+                        order['order_id'] = (await order_id_cell.text_content()).strip()
+                    else:
+                        order['order_id'] = ''
+
+                    orders.append(order)
+
+                    print(
+                        f"  订单 {i + 1}: {order['product']} | {order['direction']} | {order['order_price']} | {order['order_type']}")
+
+                except Exception as e:
+                    print(f"  解析第 {i + 1} 行失败: {e}")
+                    continue
+
+            print(f"✓ 共找到 {len(orders)} 个未结订单")
+            return orders
+
+        except Exception as e:
+            print(f"✗ 获取未结订单失败: {e}")
+            return []
+
+
+
+    # ==================== 止盈止损相关 ====================
+
+    async def get_position_liquidation_price(self, position_index: int = 0) -> Optional[float]:
+        """
+        获取指定持仓的清算价格
+
+        Args:
+            position_index: 持仓索引（从0开始）
+
+        Returns:
+            float: 清算价格，获取失败返回 None
+        """
+        try:
+            print(f"\n获取持仓 {position_index} 的清算价格...")
+
+            # 切换到 Positions 标签
+            positions_tab = self.page.locator('div:has-text("Positions")').first
+            await positions_tab.click()
+            await asyncio.sleep(1)
+
+            # 获取持仓行
+            position_rows = self.page.locator(
+                '[data-sentry-component="TablePositions"] .style_tableRow__gbjWO'
+            )
+
+            row_count = await position_rows.count()
+
+            if row_count == 0:
+                print("✗ 没有找到持仓")
+                return None
+
+            if position_index >= row_count:
+                print(f"✗ 持仓索引 {position_index} 超出范围（共 {row_count} 个持仓）")
+                return None
+
+            # 获取目标持仓行
+            target_row = position_rows.nth(position_index)
+
+            # 查找 Liq price 列（第6列）
+            cells = target_row.locator('div[data-sentry-element="CellWrapper"]')
+
+            if await cells.count() >= 6:
+                liq_price_cell = cells.nth(5)  # Liq price 在第6列（索引5）
+                liq_price_text = await liq_price_cell.text_content()
+                liq_price_text = liq_price_text.strip().replace(',', '')
+
+                if liq_price_text and liq_price_text != '-':
+                    liq_price = float(liq_price_text)
+                    print(f"✓ 清算价格: {liq_price}")
+                    return liq_price
+
+            print("✗ 未能获取清算价格")
+            return None
+
+        except Exception as e:
+            print(f"✗ 获取清算价格失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    async def click_edit_tpsl_button(self, position_index: int = 0) -> bool:
+        """
+        点击指定持仓的编辑止盈止损按钮
+
+        Args:
+            position_index: 持仓索引（从0开始）
+
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            print(f"\n点击持仓 {position_index} 的编辑 TP/SL 按钮...")
+
+            # 切换到 Positions 标签
+            positions_tab = self.page.locator('div:has-text("Positions")').first
+            await positions_tab.click()
+            await asyncio.sleep(1)
+
+            # 获取持仓行
+            position_rows = self.page.locator(
+                '[data-sentry-component="TablePositions"] .style_tableRow__gbjWO'
+            )
+
+            row_count = await position_rows.count()
+
+            if row_count == 0:
+                print("✗ 没有找到持仓")
+                return False
+
+            if position_index >= row_count:
+                print(f"✗ 持仓索引 {position_index} 超出范围（共 {row_count} 个持仓）")
+                return False
+
+            # 获取目标持仓行
+            target_row = position_rows.nth(position_index)
+
+            # 查找编辑按钮（铅笔图标）
+            edit_button = target_row.locator(
+                'span[data-sentry-element="IconEditLine"]'
+            ).first
+
+            if await edit_button.count() == 0:
+                print("✗ 未找到编辑 TP/SL 按钮")
+                return False
+
+            await edit_button.scroll_into_view_if_needed()
+            await asyncio.sleep(0.3)
+            await edit_button.click()
+            print("✓ 已点击编辑 TP/SL 按钮")
+            await asyncio.sleep(1)
+
+            # 验证对话框是否打开
+            dialog = self.page.locator('.style_contentWrapper__JrKWn:has-text("Edit TP/SL")')
+
+            if await dialog.count() > 0:
+                print("✓ TP/SL 编辑对话框已打开")
+                return True
+            else:
+                print("✗ TP/SL 编辑对话框未打开")
+                return False
+
+        except Exception as e:
+            print(f"✗ 点击编辑 TP/SL 按钮失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    async def fill_tpsl_form(self, tp_roi: float = None, sl_roi: float = None) -> bool:
+        """
+        填写止盈止损表单（通过父元素和 ROI% 文本定位）
+
+        Args:
+            tp_roi: 止盈 ROI 百分比（例如：50 表示 50%）
+            sl_roi: 止损 ROI 百分比（例如：-50 表示 -50%）
+
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            print(f"\n填写 TP/SL 表单...")
+            if tp_roi is not None:
+                print(f"  止盈 ROI: {tp_roi}%")
+            if sl_roi is not None:
+                print(f"  止损 ROI: {sl_roi}%")
+
+            # 等待对话框加载
+            dialog = self.page.locator('.style_contentWrapper__JrKWn:has-text("Edit TP/SL")')
+            await expect(dialog).to_be_visible(timeout=5000)
+            await asyncio.sleep(1)
+
+            # 填写止盈 (Take profit)
+            if tp_roi is not None:
+                print("  填写止盈 ROI...")
+
+                # 方法：找到包含 "ROI%" 文本的 Select 组件，然后找它前面的 input
+                # 在 Take profit 区域
+                tp_section = dialog.locator('.fx-column.gap-3:has(div.heading-14:has-text("Take profit"))').first
+
+                # 找到第一个包含 ROI% 的行
+                tp_roi_row = tp_section.locator('.fx.gap-2').first
+
+                # 在这一行中找到第二个输入框容器（第一个是触发价格，第二个是 ROI%）
+                tp_roi_container = tp_roi_row.locator('.text-field_textFieldContainer__qoENI').nth(1)
+
+                # 在容器中找输入框
+                tp_roi_input = tp_roi_container.locator('input').first
+
+                # 检查是否可编辑
+                if await tp_roi_input.is_disabled():
+                    print("⚠️ 止盈 ROI 输入框被禁用，可能需要先填写触发价格")
+                    return False
+
+                await tp_roi_input.scroll_into_view_if_needed()
+                await asyncio.sleep(0.3)
+                await tp_roi_input.click()
+                await asyncio.sleep(0.2)
+                await tp_roi_input.fill('')
+                await asyncio.sleep(0.2)
+                await tp_roi_input.fill(str(abs(tp_roi)))
+                print(f"✓ 已填入止盈 ROI: {tp_roi}%")
+                await asyncio.sleep(0.5)
+
+            # 填写止损 (Stop loss)
+            if sl_roi is not None:
+                print("  填写止损 ROI...")
+
+                # 在 Stop loss 区域
+                sl_section = dialog.locator('.fx-column.gap-3:has(div.heading-14:has-text("Stop loss"))').first
+
+                # 找到第一个包含 ROI% 的行
+                sl_roi_row = sl_section.locator('.fx.gap-2').first
+
+                # 在这一行中找到第二个输入框容器
+                sl_roi_container = sl_roi_row.locator('.text-field_textFieldContainer__qoENI').nth(1)
+
+                # 在容器中找输入框
+                sl_roi_input = sl_roi_container.locator('input').first
+
+                # 检查是否可编辑
+                if await sl_roi_input.is_disabled():
+                    print("⚠️ 止损 ROI 输入框被禁用，可能需要先填写触发价格")
+                    return False
+
+                await sl_roi_input.scroll_into_view_if_needed()
+                await asyncio.sleep(0.3)
+                await sl_roi_input.click()
+                await asyncio.sleep(0.2)
+                await sl_roi_input.fill('')
+                await asyncio.sleep(0.2)
+                await sl_roi_input.fill(str(sl_roi))
+                print(f"✓ 已填入止损 ROI: {sl_roi}%")
+                await asyncio.sleep(0.5)
+
+            return True
+
+        except Exception as e:
+            print(f"✗ 填写 TP/SL 表单失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    async def confirm_tpsl_edit(self) -> bool:
+        """
+        确认 TP/SL 编辑（第一次点击 Confirm）
+
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            print("\n点击 Confirm 按钮...")
+
+            # 在编辑对话框中查找 Confirm 按钮
+            dialog = self.page.locator('.style_contentWrapper__JrKWn:has-text("Edit TP/SL")')
+            confirm_button = dialog.locator('button:has-text("Confirm")').last
+
+            if await confirm_button.count() == 0:
+                print("✗ 未找到 Confirm 按钮")
+                return False
+
+            # 检查按钮是否可用
+            if not await confirm_button.is_enabled():
+                print("✗ Confirm 按钮不可用（可能未填写有效数据）")
+                return False
+
+            await confirm_button.click()
+            print("✓ 已点击 Confirm 按钮")
+            await asyncio.sleep(1)
+
+            return True
+
+        except Exception as e:
+            print(f"✗ 点击 Confirm 按钮失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    async def confirm_tpsl_final(self) -> bool:
+        """
+        最终确认 TP/SL（第二次点击 Confirm）
+
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            print("\n最终确认 TP/SL...")
+
+            # 等待确认对话框出现
+            confirm_dialog = self.page.locator(
+                '.style_contentWrapper__JrKWn:has-text("Confirm Position TP/SL")'
+            )
+
+            await expect(confirm_dialog).to_be_visible(timeout=5000)
+            print("✓ 确认对话框已打开")
+
+            # 查找并点击最终的 Confirm 按钮
+            final_confirm_button = confirm_dialog.locator('button:has-text("Confirm")').last
+
+            if await final_confirm_button.count() == 0:
+                print("✗ 未找到最终 Confirm 按钮")
+                return False
+
+            await final_confirm_button.click()
+            print("✓ 已点击最终 Confirm 按钮")
+            await asyncio.sleep(2)
+
+            # 验证对话框是否关闭
+            if await confirm_dialog.count() == 0 or not await confirm_dialog.is_visible():
+                print("✓ TP/SL 设置成功")
+                return True
+            else:
+                print("⚠️ TP/SL 设置状态未确认")
+                return True
+
+        except Exception as e:
+            print(f"✗ 最终确认 TP/SL 失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+
+    async def set_position_tpsl(
+            self,
+            position_index: int = 0,
+            tp_roi: float = None,
+            sl_roi: float = None
+    ) -> bool:
+        """
+        为指定持仓设置止盈止损
+
+        Args:
+            position_index: 持仓索引（从0开始）
+            tp_roi: 止盈 ROI 百分比（例如：50 表示 50%）
+            sl_roi: 止损 ROI 百分比（例如：-50 表示 -50%）
+
+        Returns:
+            bool: 操作是否成功
+        """
+        print("\n" + "=" * 60)
+        print(f"⚙️ 设置持仓 {position_index} 的止盈止损")
+        print("=" * 60)
+
+        try:
+            # 1. 获取清算价格（可选，用于验证）
+            liq_price = await self.get_position_liquidation_price(position_index)
+
+            if liq_price:
+                print(f"  持仓清算价格: {liq_price}")
+
+            # 2. 点击编辑 TP/SL 按钮
+            if not await self.click_edit_tpsl_button(position_index):
+                return False
+
+            # 3. 填写止盈止损表单
+            if not await self.fill_tpsl_form(tp_roi, sl_roi):
+                return False
+
+            # 4. 点击第一个 Confirm
+            if not await self.confirm_tpsl_edit():
+                return False
+
+            # 5. 点击最终 Confirm
+            if not await self.confirm_tpsl_final():
+                return False
+
+            print("=" * 60)
+            print("✅ 止盈止损设置完成")
+            print("=" * 60 + "\n")
+
+            return True
+
+        except Exception as e:
+            print(f"✗ 设置止盈止损失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    async def set_all_positions_tpsl(
+            self,
+            tp_roi: float = None,
+            sl_roi: float = None
+    ) -> bool:
+        """
+        为所有持仓批量设置止盈止损
+
+        Args:
+            tp_roi: 止盈 ROI 百分比（例如：50 表示 50%）
+            sl_roi: 止损 ROI 百分比（例如：-50 表示 -50%）
+
+        Returns:
+            bool: 操作是否成功
+        """
+        print("\n" + "=" * 60)
+        print("⚙️ 批量设置所有持仓的止盈止损")
+        print("=" * 60)
+
+        try:
+            # 获取持仓数量
+            position_count = await self.check_positions(show_details=False)
+
+            if position_count <= 0:
+                print("✗ 没有持仓需要设置")
+                return False
+
+            print(f"  共有 {position_count} 个持仓")
+
+            success_count = 0
+
+            # 为每个持仓设置止盈止损
+            for i in range(position_count):
+                print(f"\n处理持仓 {i + 1}/{position_count}...")
+
+                if await self.set_position_tpsl(i, tp_roi, sl_roi):
+                    success_count += 1
+                    print(f"✓ 持仓 {i + 1} 设置成功")
+                else:
+                    print(f"✗ 持仓 {i + 1} 设置失败")
+
+                # 等待一下再处理下一个
+                await asyncio.sleep(1)
+
+            print("\n" + "=" * 60)
+            print(f"✅ 批量设置完成: {success_count}/{position_count} 成功")
+            print("=" * 60 + "\n")
+
+            return success_count == position_count
+
+        except Exception as e:
+            print(f"✗ 批量设置止盈止损失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
