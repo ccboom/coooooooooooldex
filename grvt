@@ -515,7 +515,7 @@ class GrvtTradingBot:
 
         # 如果没有指定价格，使用中间价
         if price is None:
-            bid, ask = await self.get_order_book_prices()
+            bid, ask = await self.get_orderbook_prices()
             if bid and ask:
                 price = self.calculate_mid_price(bid, ask)
             else:
@@ -545,7 +545,7 @@ class GrvtTradingBot:
 
         # 如果没有指定价格，使用中间价
         if price is None:
-            bid, ask = await self.get_order_book_prices()
+            bid, ask = await self.get_orderbook_prices()
             if bid and ask:
                 price = self.calculate_mid_price(bid, ask)
             else:
@@ -814,7 +814,7 @@ class GrvtTradingBot:
 
         # 如果没有指定价格，使用中间价
         if price is None:
-            bid, ask = await self.get_order_book_prices()
+            bid, ask = await self.get_orderbook_prices()
             if bid and ask:
                 price = self.calculate_mid_price(bid, ask)
             else:
