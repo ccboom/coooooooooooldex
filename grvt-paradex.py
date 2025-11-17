@@ -8,11 +8,10 @@ GRVT 和 Paradex 对冲交易机器人
 import asyncio
 from playwright.async_api import async_playwright, Page as AsyncPage
 from grvt import GrvtTradingBot
-from paradex_trader import  ParadexTrader
+from paradex_trader import ParadexTrader
 from typing import Optional, Tuple
 from datetime import datetime
 import random
-
 
 
 class HedgeTradingBot:
@@ -126,7 +125,7 @@ class HedgeTradingBot:
             else:
                 print("⚠️ GRVT订单超时未成交，检查挂单...")
                 await self.grvt_bot.cancel_order(row_index=0)
-                await self.grvt_bot.check_open_orders(show_details=True)
+                # await self.grvt_bot.check_open_orders(show_details=True)
                 return False
 
             # 第三步：在Paradex市价开多
@@ -144,7 +143,6 @@ class HedgeTradingBot:
                 sl_roi=-50
             )
             print("✅ GRVT TP SL 设置成功")
-
 
             print("\n" + "🎊" * 30)
             print("对冲成功：GRVT空头 + Paradex多头")
@@ -195,7 +193,7 @@ class HedgeTradingBot:
                     print(f"  等待中... ({i + 1}/{max_wait}秒)")
             else:
                 print("⚠️ GRVT订单超时未成交，检查挂单...")
-                await self.grvt_bot.check_open_orders(show_details=True)
+                # await self.grvt_bot.check_open_orders(show_details=True)
                 await self.grvt_bot.cancel_order(row_index=0)
                 return False
 
@@ -238,28 +236,28 @@ class HedgeTradingBot:
 
             # 检查 GRVT 持仓
             grvt_positions = await self.grvt_bot.check_positions(show_details=False)
-            
+
             if grvt_positions > 0:
                 print(f"\n[1/3] 发现 {grvt_positions} 个 GRVT 持仓，准备限价平仓...")
-                
+
                 # 限价平仓第一个 GRVT 持仓
                 if not await self.grvt_bot.limit_close_position(0):
                     print("❌ GRVT 限价平仓失败")
                     return False
-                
+
                 print("✅ GRVT 限价平仓订单已提交")
-                
+
                 # 等待 GRVT 订单成交
                 print("\n[2/3] 等待 GRVT 平仓订单成交...")
                 max_wait = 30
                 for i in range(max_wait):
                     await asyncio.sleep(1)
                     remaining_positions = await self.grvt_bot.check_positions(show_details=False)
-                    
+
                     if remaining_positions == 0:
                         print(f"✅ GRVT 平仓订单已成交（等待 {i + 1} 秒）")
                         break
-                    
+
                     if i % 5 == 4:
                         print(f"  等待中... ({i + 1}/{max_wait} 秒)")
                 else:
@@ -274,29 +272,29 @@ class HedgeTradingBot:
                     await asyncio.sleep(2)
             else:
                 print("✅ GRVT 无持仓需要关闭")
-            
+
             # 检查并关闭 Paradex 持仓
             paradex_positions = await self.paradex_trader.get_current_positions()
-            
+
             if len(paradex_positions) > 0:
                 print(f"\n[3/3] 发现 {len(paradex_positions)} 个 Paradex 持仓，准备市价平仓...")
-                
+
                 # 市价平仓所有 Paradex 持仓
                 if not await self.paradex_trader.close_all_positions_market():
                     print("❌ Paradex 市价平仓失败")
                     return False
-                
+
                 print("✅ Paradex 持仓已全部平仓")
                 await asyncio.sleep(2)
             else:
                 print("✅ Paradex 无持仓需要关闭")
-            
+
             print("\n" + "✅" * 30)
             print("所有持仓已关闭")
             print("✅" * 30 + "\n")
-            
+
             return True
-            
+
         except Exception as e:
             print(f"❌ 关闭持仓失败: {e}")
             import traceback
@@ -331,21 +329,25 @@ class HedgeTradingBot:
             if not success:
                 self.failed_trades += 1
                 return False
-            
+
             self.successful_trades += 1
-            
+
+            wait_time = random.randint(600, 900)  # 180-300 秒 = 3-5 分钟
+            print(f"\n⏳ 随机等待 {wait_time} 秒 ({wait_time / 60:.1f} 分钟) 后关仓易...")
+            await asyncio.sleep(wait_time)
+
             # 开仓成功后，关闭持仓
             print("\n" + "=" * 60)
             print("步骤 2: 关闭持仓")
             print("=" * 60)
-            
+
             if not await self.close_existing_positions():
                 print("❌ 关闭持仓失败")
                 return False
-            
+
             # 随机等待 3-5 分钟后继续下一次
             wait_time = random.randint(180, 300)  # 180-300 秒 = 3-5 分钟
-            print(f"\n⏳ 随机等待 {wait_time} 秒 ({wait_time/60:.1f} 分钟) 后继续下一次交易...")
+            print(f"\n⏳ 随机等待 {wait_time} 秒 ({wait_time / 60:.1f} 分钟) 后继续下一次交易...")
             await asyncio.sleep(wait_time)
 
             return True
@@ -406,14 +408,14 @@ class HedgeTradingBot:
 async def create_browser_context(playwright):
     """创建浏览器上下文"""
     workid = 44
-    proxy = "127.0.0.1:7890" # if workid == 44 else f"127.0.0.1:400{workid}"
-    user_data = r"D:\"
-    path_to_extension = r"D:\"
-    path_to_extension2 = r"0"
+    proxy = "127.0.0.1:7890" if workid == 44 else f"127.0.0.1:400{workid}"
+    user_data = r"D:\1lumao\Workers\\"
+    path_to_extension = r"D:\1lumao\metama\12.5.0_0"
+    path_to_extension2 = r"D:\1lumao\scamsniffer\0.0.60_0"
 
     browser = await playwright.chromium.launch_persistent_context(
         user_data_dir=user_data + str(workid),
-        executable_path=r"",
+        executable_path=r"C:\Users\中\AppData\Local\VirtualBrowser\Application\VirtualBrowser.exe",
         accept_downloads=False,
         headless=False,
         bypass_csp=True,
