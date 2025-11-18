@@ -216,7 +216,7 @@ class GrvtTradingBot:
         计算中间价
         """
         if highest_bid and lowest_ask:
-            mid_price = round((highest_bid + lowest_ask) / 2, 1)
+            mid_price = round((highest_bid + lowest_ask) / 2, 5)
             print(f"中间价 (Mid): {mid_price}")
             return mid_price
         print("无法计算中间价")
@@ -405,13 +405,32 @@ class GrvtTradingBot:
 
     # ==================== 点击下单按钮 ====================
 
+    async def check_post_only(self):
+        """判断是否包含勾选标记的 rect，如果没有则点击"""
+
+        # 定位到 Post-only 的 checkbox 容器
+        container = self.page.locator('label:has-text("Post-only")').locator('..')
+
+        # 检查 SVG 中是否包含勾选标记的 rect
+        checked_rect = container.locator(
+            'svg rect[width="16"][height="16"][rx="2"][fill="var(--theme-feature-active)"]')
+
+        # 如果不存在勾选标记，则点击勾选
+        if await checked_rect.count() == 0:
+            await container.click()
+            print("Post-only checkbox 已勾选")
+        else:
+            print("Post-only checkbox 已经是勾选状态，无需操作")
+
+
     async def click_buy_long(self):
         """点击 Buy/Long 按钮"""
         try:
             print("点击 Buy/Long 按钮...")
 
             buy_button = self.page.locator('button:has-text("Buy / Long")')
-            await self.page.locator('text=Post-only').first.click()
+            # await self.page.locator('text=Post-only').first.click()
+            await self.check_post_only()
             await buy_button.wait_for(state="visible", timeout=self.timeout)
 
             await buy_button.click()
@@ -423,7 +442,12 @@ class GrvtTradingBot:
                 confirm_button = self.page.locator('button:has-text("Confirm"), button:has-text("确认")')
                 if await confirm_button.count() > 0:
                     await confirm_button.first.click()
+
+                    await self.page.wait_for_timeout(200)
                     print("✓ 已确认订单")
+                    if await self.page.get_by_role("button", name="Sign with SecureKey").count() > 0:
+                        await self.page.get_by_role("button", name="Sign with SecureKey").click()
+                    print("✓ 已点击下单")
                     await asyncio.sleep(1)
             except:
                 pass
@@ -440,7 +464,8 @@ class GrvtTradingBot:
             print("点击 Sell/Short 按钮...")
 
             sell_button = self.page.locator('button:has-text("Sell / Short")')
-            await self.page.locator('text=Post-only').first.click()
+            # await self.page.locator('text=Post-only').first.click()
+            await self.check_post_only()
             await sell_button.wait_for(state="visible", timeout=self.timeout)
 
             await sell_button.click()
@@ -452,7 +477,12 @@ class GrvtTradingBot:
                 confirm_button = self.page.locator('button:has-text("Confirm"), button:has-text("确认")')
                 if await confirm_button.count() > 0:
                     await confirm_button.first.click()
+
+                    await self.page.wait_for_timeout(200)
                     print("✓ 已确认订单")
+                    if await self.page.get_by_role("button", name="Sign with SecureKey").count() > 0:
+                        await self.page.get_by_role("button", name="Sign with SecureKey").click()
+                    print("✓ 已点击下单")
                     await asyncio.sleep(1)
             except:
                 pass
@@ -529,7 +559,7 @@ class GrvtTradingBot:
             return False
 
         # 2. 填写价格和数量
-        if not await self.fill_limit_order_form(price, quantity):
+        if not await self.fill_limit_order_form(price+5, quantity):
             return False
 
         # 3. 点击买入
@@ -581,10 +611,10 @@ class GrvtTradingBot:
                 print("检查持仓状态...")
 
             # 点击 Positions 标签
-            positions_tab = self.page.locator('div:has-text("Positions")').first
+            positions_tab = self.page.locator('.style_tabItem__eQp4d:has-text("Positions")').first
             await positions_tab.wait_for(state="visible", timeout=self.timeout)
             await positions_tab.click()
-            await asyncio.sleep(2)
+            await asyncio.sleep(1)
 
             # 检查是否显示 "No results"
             no_results = self.page.locator('div:has-text("No results")')
@@ -639,7 +669,8 @@ class GrvtTradingBot:
         """获取持仓列表（带详细信息）"""
         try:
             # 切换到 Positions 标签
-            positions_tab = self.page.locator('div:has-text("Positions")').first
+            positions_tab = self.page.locator('.style_tabItem__eQp4d:has-text("Positions")').first
+            # self.page.locator('.style_tabItem__eQp4d:has-text("Open orders")').first
             await positions_tab.click()
             await asyncio.sleep(2)
 
@@ -755,7 +786,7 @@ class GrvtTradingBot:
         try:
             print("点击确认按钮...")
 
-            confirm_button = self.page.locator('.style_contentWrapper__JrKWn button:has-text("Confirm")')
+            confirm_button = self.page.locator('button:has-text("Confirm"), button:has-text("确认")')
             await confirm_button.wait_for(state="visible", timeout=self.timeout)
 
             await confirm_button.click()
@@ -1260,7 +1291,7 @@ class GrvtTradingBot:
             print(f"\n获取持仓 {position_index} 的清算价格...")
 
             # 切换到 Positions 标签
-            positions_tab = self.page.locator('div:has-text("Positions")').first
+            positions_tab = self.page.locator('.style_tabItem__eQp4d:has-text("Positions")').first
             await positions_tab.click()
             await asyncio.sleep(1)
 
@@ -1318,7 +1349,7 @@ class GrvtTradingBot:
             print(f"\n点击持仓 {position_index} 的编辑 TP/SL 按钮...")
 
             # 切换到 Positions 标签
-            positions_tab = self.page.locator('div:has-text("Positions")').first
+            positions_tab = self.page.locator('.style_tabItem__eQp4d:has-text("Positions")').first
             await positions_tab.click()
             await asyncio.sleep(1)
 
