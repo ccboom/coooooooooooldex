@@ -559,7 +559,7 @@ class GrvtTradingBot:
             return False
 
         # 2. 填写价格和数量
-        if not await self.fill_limit_order_form(price+5, quantity):
+        if not await self.fill_limit_order_form(price, quantity):
             return False
 
         # 3. 点击买入
