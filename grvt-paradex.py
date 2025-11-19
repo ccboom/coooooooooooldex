@@ -338,42 +338,42 @@ class HedgeTradingBot:
             # 获取价格并执行对冲
             grvt_price, paradex_price, price_diff = await self.get_price_difference()
 
-            # if grvt_price is None or paradex_price is None or price_diff is None:
-            #     return False
-            #
-            # abs_diff = abs(price_diff)
-            #
-            # if abs_diff < self.price_diff_threshold:
-            #     print(f"ℹ️  价差 ${abs_diff:.2f} 小于阈值 ${self.price_diff_threshold:.2f}，不交易")
-            #     return False
-            #
-            # self.total_trades += 1
-            #
-            # # 执行开仓
-            # if price_diff > 0:
-            #     print(f"\n💰 发现套利机会：GRVT价格高 ${abs_diff:.2f}")
-            #     success = await self.execute_hedge_grvt_short_paradex_long(grvt_price)
-            # else:
-            #     print(f"\n💰 发现套利机会：GRVT价格低 ${abs_diff:.2f}")
-            #     success = await self.execute_hedge_grvt_long_paradex_short(grvt_price)
-            #
-            # if not success:
-            #     self.failed_trades += 1
-            #     return False
-            #
-            # self.successful_trades += 1
-            #
-            # wait_time = random.randint(180, 300)  # 180-300 秒 = 3-5 分钟
-            # expire_time = datetime.now() + timedelta(seconds=wait_time)
-            #
-            # print(f"\n⏳ 随机等待 {wait_time} 秒 ({wait_time / 60:.1f} 分钟) 后关仓易...")
-            # print("┌────────────────────────────────────────────")
-            # print(f"│ 当前时间   : \033[96m{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\033[0m")
-            # print(f"│ 到期时间   : \033[93m{expire_time.strftime('%Y-%m-%d %H:%M:%S')}\033[0m")
-            # print(f"│ 剩余时间   : \033[92m{wait_time // 60:02d}分 {wait_time % 60:02d}秒\033[0m")
-            # print("└────────────────────────────────────────────")
-            #
-            # await asyncio.sleep(wait_time)
+            if grvt_price is None or paradex_price is None or price_diff is None:
+                return False
+
+            abs_diff = abs(price_diff)
+
+            if abs_diff < self.price_diff_threshold:
+                print(f"ℹ️  价差 ${abs_diff:.2f} 小于阈值 ${self.price_diff_threshold:.2f}，不交易")
+                return False
+
+            self.total_trades += 1
+
+            # 执行开仓
+            if price_diff > 0:
+                print(f"\n💰 发现套利机会：GRVT价格高 ${abs_diff:.2f}")
+                success = await self.execute_hedge_grvt_short_paradex_long(grvt_price)
+            else:
+                print(f"\n💰 发现套利机会：GRVT价格低 ${abs_diff:.2f}")
+                success = await self.execute_hedge_grvt_long_paradex_short(grvt_price)
+
+            if not success:
+                self.failed_trades += 1
+                return False
+
+            self.successful_trades += 1
+
+            wait_time = random.randint(180, 300)  # 180-300 秒 = 3-5 分钟
+            expire_time = datetime.now() + timedelta(seconds=wait_time)
+
+            print(f"\n⏳ 随机等待 {wait_time} 秒 ({wait_time / 60:.1f} 分钟) 后关仓易...")
+            print("┌────────────────────────────────────────────")
+            print(f"│ 当前时间   : \033[96m{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\033[0m")
+            print(f"│ 到期时间   : \033[93m{expire_time.strftime('%Y-%m-%d %H:%M:%S')}\033[0m")
+            print(f"│ 剩余时间   : \033[92m{wait_time // 60:02d}分 {wait_time % 60:02d}秒\033[0m")
+            print("└────────────────────────────────────────────")
+
+            await asyncio.sleep(wait_time)
 
             # 开仓成功后，关闭持仓
             print("\n" + "=" * 60)
