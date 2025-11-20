@@ -112,7 +112,7 @@ class ParadexTrader:
                     timeout=10000
                 )
 
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
                 bid_elements = self.page.locator('[aria-label*="Bid @"]')
                 count = await bid_elements.count()
@@ -121,7 +121,7 @@ class ParadexTrader:
 
                 if count == 0:
                     print("  未找到买单，重试...")
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)
                     continue
 
                 for i in range(count):
@@ -135,12 +135,12 @@ class ParadexTrader:
                         return price
 
                 print("  所有买单都无效，重试...")
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
             except Exception as e:
                 print(f"  获取买价出错: {e}")
                 if attempt < max_attempts - 1:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)
 
         print(f"✗ 获取最高买价失败")
         return None
@@ -165,7 +165,7 @@ class ParadexTrader:
                     timeout=10000
                 )
 
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
                 ask_elements = self.page.locator('[aria-label*="Ask @"]')
                 count = await ask_elements.count()
@@ -174,7 +174,7 @@ class ParadexTrader:
 
                 if count == 0:
                     print("  未找到卖单，重试...")
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)
                     continue
 
                 for i in range(count - 1, -1, -1):
@@ -188,12 +188,12 @@ class ParadexTrader:
                         return price
 
                 print("  所有卖单都无效，重试...")
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
             except Exception as e:
                 print(f"  获取卖价出错: {e}")
                 if attempt < max_attempts - 1:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)
 
         print(f"✗ 获取最低卖价失败")
         return None
@@ -393,7 +393,6 @@ class ParadexTrader:
             active_panel = self.page.locator('div[role="tabpanel"][data-state="active"]').first
 
             if await active_panel.count() > 0:
-                print('daxiaoshuru')
                 size_input = active_panel.locator('input[placeholder="大小"]').first
 
                 # 如果找不到，尝试通过 inputmode 属性查找
@@ -410,13 +409,13 @@ class ParadexTrader:
 
             # 先点击获得焦点
             await size_input.click()
-            await asyncio.sleep(0.3)
+            # await asyncio.sleep(0.3)
 
             # 使用 fill 方法（推荐方式）
             await size_input.fill('')  # 先清空
-            await asyncio.sleep(0.2)
+            # await asyncio.sleep(0.2)
             await size_input.fill(str(size))  # 再填充
-            await asyncio.sleep(0.3)
+            # await asyncio.sleep(0.3)
 
             # # 验证输入
             actual_value = await size_input.input_value()
@@ -429,27 +428,27 @@ class ParadexTrader:
                 print("  第一种方法失败，尝试第二种方法...")
 
                 await size_input.click()
-                await asyncio.sleep(0.2)
+                # await asyncio.sleep(0.2)
                 await size_input.fill('')
-                await asyncio.sleep(0.2)
+                # await asyncio.sleep(0.2)
 
                 # 使用键盘清空
                 await size_input.press('Control+A')
-                await asyncio.sleep(0.1)
+                # await asyncio.sleep(0.1)
                 await size_input.press('Backspace')
-                await asyncio.sleep(0.2)
+                # await asyncio.sleep(0.2)
                 print(size)
                 # 逐字符输入
                 await size_input.click()
                 await self.page.keyboard.type(str(size), delay=100)
-                await asyncio.sleep(0.3)
+                # await asyncio.sleep(0.3)
 
                 actual_value = await size_input.input_value()
                 print(f"  第二次尝试结果: {actual_value}")
 
             # 触发失焦事件
             await size_input.press('Tab')
-            await asyncio.sleep(0.2)
+            # await asyncio.sleep(0.2)
 
             # 最终验证
             actual_value = await size_input.input_value()
@@ -616,7 +615,7 @@ class ParadexTrader:
             actual_text = (await confirm_button.text_content()).strip()
             print(f"✓ 已点击 {actual_text}")
 
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             return True
 
@@ -647,7 +646,7 @@ class ParadexTrader:
             await open_orders_tab.click()
 
             print("✓ 已切换到未结订单标签")
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             orders_panel = self.page.locator(
                 'div[role="tabpanel"][id*="open-orders"][data-state="active"]'
@@ -684,7 +683,7 @@ class ParadexTrader:
                     return False
 
                 print(f"  等待订单出现... ({int(end_time - time.time())}秒剩余)")
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
             print("✗ 超时：未在未结订单中找到新订单")
             return False
@@ -712,7 +711,7 @@ class ParadexTrader:
                 return False, 0
 
             await open_orders_tab.click()
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             orders_panel = self.page.locator(
                 'div[role="tabpanel"][id="open-orders"]'
@@ -758,7 +757,7 @@ class ParadexTrader:
                 return False
 
             await positions_tab.click()
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             positions_panel = self.page.locator(
                 'div[role="tabpanel"][id="open-positions"]'
@@ -791,7 +790,7 @@ class ParadexTrader:
                     return True
 
                 print(f"  等待持仓出现... ({int(end_time - time.time())}秒剩余)")
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
             print("✗ 超时：未找到持仓")
             return False
@@ -820,7 +819,7 @@ class ParadexTrader:
 
             if await positions_tab.get_attribute('aria-selected') != 'true':
                 await positions_tab.click()
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
             positions_panel = self.page.locator(
                 'div[role="tabpanel"][id="open-positions"]'
@@ -899,7 +898,7 @@ class ParadexTrader:
 
             if await positions_tab.get_attribute('aria-selected') != 'true':
                 await positions_tab.click()
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
             positions_panel = self.page.locator(
                 'div[role="tabpanel"][id="open-positions"]'
@@ -951,7 +950,7 @@ class ParadexTrader:
             await market_close_button.click()
             print("✓ 已点击市场平仓按钮")
 
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             # 等待弹窗出现
             print("等待平仓确认弹窗...")
@@ -1045,7 +1044,7 @@ class ParadexTrader:
 
                 if await self.close_position_market(row_index=i):
                     success_count += 1
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)
                 else:
                     fail_count += 1
 
@@ -1090,7 +1089,7 @@ class ParadexTrader:
                     return True
 
                 print(f"  等待持仓关闭... ({int(end_time - time.time())}秒剩余)")
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
             print(f"✗ 超时：{market} 持仓仍存在")
             return False
