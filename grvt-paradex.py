@@ -539,11 +539,11 @@ async def main():
             # print("正在打开Paradex交易页面...")
             # await paradex_page.goto("https://app.testnet.paradex.trade/trade/BTC-USD-PERP")
 
-            await grvt_page.goto("https://grvt.io/exchange/perpetual/ETH-USDT")
+            await grvt_page.goto("https://grvt.io/exchange/perpetual/BTC-USDT")
             # await grvt_page.wait_for_load_state("networkidle")
 
             print("正在打开Paradex交易页面...")
-            await paradex_page.goto("https://app.paradex.trade/trade/ETH-USD-PERP")
+            await paradex_page.goto("https://app.paradex.trade/trade/BTC-USD-PERP")
             # await paradex_page.wait_for_load_state("networkidle")
 
             # await paradex_page.pause()
@@ -616,3 +616,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
