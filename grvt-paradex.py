@@ -26,6 +26,7 @@ class HedgeTradingBot:
             price_diff_threshold: float = 10.0,
             order_size: float = 0.002,
             check_interval: int = 5,
+            max_close_price_diff : Optional[float] = 1,
     ):
         self.grvt_bot = GrvtTradingBot(grvt_page)
         self.paradex_trader = ParadexTrader(paradex_page)
@@ -33,6 +34,8 @@ class HedgeTradingBot:
         self.price_diff_threshold = price_diff_threshold
         self.order_size = order_size
         self.check_interval = check_interval
+        self.max_close_price_diff = max_close_price_diff
+
 
         self.is_running = False
         self.total_trades = 0
@@ -112,7 +115,7 @@ class HedgeTradingBot:
 
             # 第二步：等待成交
             print("\n[2/3] 等待GRVT订单成交...")
-            max_wait = 10
+            max_wait = 30
             for i in range(max_wait):
                 position_count = await self.grvt_bot.check_positions(show_details=False)
 
@@ -124,9 +127,11 @@ class HedgeTradingBot:
                     print(f"  等待中... ({i + 1}/{max_wait}秒)")
             else:
                 print("⚠️ GRVT订单超时未成交，检查挂单...")
-                await self.grvt_bot.cancel_order(row_index=0)
+                fix  = await self.grvt_bot.cancel_order(row_index=0)
+                if fix != 1:
+                    return False
                 # await self.grvt_bot.check_open_orders(show_details=True)
-                return False
+
 
             # 第三步：在Paradex市价开多
             print("\n[3/3] Paradex 市价开多...")
@@ -137,11 +142,6 @@ class HedgeTradingBot:
 
             print("✅ Paradex市价单已成交")
 
-            await self.grvt_bot.set_position_tpsl(
-                position_index=0,
-                tp_roi=50,
-                sl_roi=-50
-            )
             print("✅ GRVT TP SL 设置成功")
 
             print("\n" + "🎊" * 30)
@@ -175,7 +175,7 @@ class HedgeTradingBot:
 
             # 第二步：等待成交
             print("\n[2/3] 等待GRVT订单成交...")
-            max_wait = 5
+            max_wait = 30
             for i in range(max_wait):
                 await asyncio.sleep(1)
                 position_count = await self.grvt_bot.check_positions(show_details=False)
@@ -183,19 +183,15 @@ class HedgeTradingBot:
 
                 if position_count > 0:
                     print(f"✅ GRVT订单已成交（等待{i + 1}秒）")
-                    await self.grvt_bot.set_position_tpsl(
-                        position_index=0,
-                        tp_roi=50,
-                        sl_roi=-50
-                    )
                     break
 
                 print(f"  等待中... ({i + 1}/{max_wait}秒)")
             else:
                 print("⚠️ GRVT订单超时未成交，检查挂单...")
                 # await self.grvt_bot.check_open_orders(show_details=True)
-                await self.grvt_bot.cancel_order(row_index=0)
-                return False
+                fix = await self.grvt_bot.cancel_order(row_index=0)
+                if fix != 1:
+                    return False
 
             # 第三步：在Paradex市价开空
             print("\n[3/3] Paradex 市价开空...")
@@ -206,11 +202,6 @@ class HedgeTradingBot:
 
             print("✅ Paradex市价单已成交")
 
-            await self.grvt_bot.set_position_tpsl(
-                position_index=0,
-                tp_roi=50,
-                sl_roi=-50
-            )
 
             print("\n" + "🎊" * 30)
             print("对冲成功：GRVT多头 + Paradex空头")
@@ -224,9 +215,14 @@ class HedgeTradingBot:
             traceback.print_exc()
             return False
 
-    async def close_existing_positions(self) -> bool:
+    async def close_existing_positions(self, max_price_diff: float = 1.0) -> bool:
         """
         关闭现有的 GRVT 和 Paradex 持仓
+        在平仓前会检查价差，如果价差过大会等待
+
+        Args:
+            max_price_diff: 允许的最大价差（绝对值），默认为1.0美元
+
         GRVT: 通过开相反方向的仓位来平仓（多单->开空，空单->开多）
         Paradex: 市价平仓
         """
@@ -234,6 +230,30 @@ class HedgeTradingBot:
             print("\n" + "🔄" * 30)
             print("检查并关闭现有持仓")
             print("🔄" * 30)
+
+            # ==================== 价差检查 ====================
+            print(f"\n[预检查] 检查价差是否在合理范围内（阈值: ${max_price_diff}）...")
+
+            check_count = 0
+            while True:
+                check_count += 1
+                grvt_price, paradex_price, price_diff = await self.get_price_difference()
+
+                if grvt_price is None or paradex_price is None or price_diff is None:
+                    print(f"❌ 无法获取价格信息（第{check_count}次检查），等待20秒后重试...")
+                    await asyncio.sleep(20)
+                    continue
+
+                # 检查价差绝对值
+                abs_price_diff = abs(price_diff)
+
+                if abs_price_diff <= max_price_diff:
+                    print(f"✅ 价差合理（${abs_price_diff:.5f} <= ${max_price_diff}），可以执行平仓")
+                    break
+                else:
+                    print(f"⚠️ 价差过大（${abs_price_diff:.5f} > ${max_price_diff}）")
+                    print(f"   第{check_count}次检查，等待20秒后重新检查...")
+                    await asyncio.sleep(20)
 
             # ==================== 第一步：检查并平仓 GRVT 持仓 ====================
             grvt_positions = await self.grvt_bot.get_position_list()
@@ -282,7 +302,7 @@ class HedgeTradingBot:
 
                 # 等待所有 GRVT 持仓平仓完成
                 print("\n等待 GRVT 平仓订单成交...")
-                max_wait = 10  # 最多等待30秒
+                max_wait = 10  # 最多等待10秒
 
                 for i in range(max_wait):
                     await asyncio.sleep(1)
@@ -298,17 +318,17 @@ class HedgeTradingBot:
                     # 超时未完全成交
                     print("⚠️ GRVT 平仓订单超时未完全成交")
                     print("  尝试取消所有挂单...")
-                    await self.grvt_bot.cancel_all_orders()
+                    await self.grvt_bot.cancel_all_orders(row_index=0)
                     return False
 
             else:
                 print("\n[1/2] ✅ GRVT 无持仓需要关闭")
 
-            # 检查并关闭 Paradex 持仓
+            # ==================== 第二步：检查并关闭 Paradex 持仓 ====================
             paradex_positions = await self.paradex_trader.get_current_positions()
 
             if len(paradex_positions) > 0:
-                print(f"\n[3/3] 发现 {len(paradex_positions)} 个 Paradex 持仓，准备市价平仓...")
+                print(f"\n[2/2] 发现 {len(paradex_positions)} 个 Paradex 持仓，准备市价平仓...")
 
                 # 市价平仓所有 Paradex 持仓
                 if not await self.paradex_trader.close_all_positions_market():
@@ -318,7 +338,7 @@ class HedgeTradingBot:
                 print("✅ Paradex 持仓已全部平仓")
                 await asyncio.sleep(2)
             else:
-                print("✅ Paradex 无持仓需要关闭")
+                print("\n[2/2] ✅ Paradex 无持仓需要关闭")
 
             print("\n" + "✅" * 30)
             print("所有持仓已关闭")
@@ -330,6 +350,7 @@ class HedgeTradingBot:
             print(f"❌ 关闭持仓失败: {e}")
             import traceback
             traceback.print_exc()
+
             return False
 
     async def check_and_execute_hedge(self) -> bool:
@@ -363,7 +384,7 @@ class HedgeTradingBot:
 
             self.successful_trades += 1
 
-            wait_time = random.randint(180, 300)  # 180-300 秒 = 3-5 分钟
+            wait_time = random.randint(600, 1200)  # 600-1200 秒 = 10-20 分钟
             expire_time = datetime.now() + timedelta(seconds=wait_time)
 
             print(f"\n⏳ 随机等待 {wait_time} 秒 ({wait_time / 60:.1f} 分钟) 后关仓易...")
@@ -384,7 +405,7 @@ class HedgeTradingBot:
             retry_interval = 3  # 秒
 
             for attempt in range(1, max_retries + 1):
-                if await self.close_existing_positions():
+                if await self.close_existing_positions(self.max_close_price_diff):
                     print(f"✅ 关闭持仓成功 (第{attempt}次尝试)")
                     break
                 else:
@@ -518,11 +539,11 @@ async def main():
             # print("正在打开Paradex交易页面...")
             # await paradex_page.goto("https://app.testnet.paradex.trade/trade/BTC-USD-PERP")
 
-            await grvt_page.goto("https://grvt.io/exchange/perpetual/BTC-USDT")
+            await grvt_page.goto("https://grvt.io/exchange/perpetual/ETH-USDT")
             # await grvt_page.wait_for_load_state("networkidle")
 
             print("正在打开Paradex交易页面...")
-            await paradex_page.goto("https://app.paradex.trade/trade/BTC-USD-PERP")
+            await paradex_page.goto("https://app.paradex.trade/trade/ETH-USD-PERP")
             # await paradex_page.wait_for_load_state("networkidle")
 
             # await paradex_page.pause()
@@ -533,6 +554,7 @@ async def main():
                 # 单次手动对冲
                 price_diff_threshold = float(input("请输入价差阈值（美元，默认10）: ").strip() or "10")
                 order_size = float(input("请输入订单大小（默认0.002）: ").strip() or "0.002")
+
 
                 bot = HedgeTradingBot(
                     grvt_page=grvt_page,
@@ -548,13 +570,14 @@ async def main():
                 price_diff_threshold = float(input("请输入价差阈值（美元，默认10）: ").strip() or "10")
                 order_size = float(input("请输入订单大小（默认0.002）: ").strip() or "0.002")
                 check_interval = int(input("请输入检查间隔（秒，默认5）: ").strip() or "5")
-
+                max_close_price_diff = float(input("请输入平仓时允许的最大价差（美元，默认1）: ").strip() or "1")
                 bot = HedgeTradingBot(
                     grvt_page=grvt_page,
                     paradex_page=paradex_page,
                     price_diff_threshold=price_diff_threshold,
                     order_size=order_size,
-                    check_interval=check_interval
+                    check_interval=check_interval,
+                    max_close_price_diff = max_close_price_diff
                 )
 
                 await bot.start_monitoring()
