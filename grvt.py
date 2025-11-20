@@ -6,6 +6,7 @@ GRVT 交易机器人核心功能类
 import asyncio
 from typing import Optional,Tuple
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError, expect
+from typing import List, Dict
 
 
 class GrvtTradingBot:
@@ -1293,7 +1294,32 @@ class GrvtTradingBot:
             print(f"✗ 获取未结订单失败: {e}")
             return []
 
+    async def get_simple_pnl_async(self) -> List[Dict[str, str]]:
+        """
+        异步简化版本：只获取产品名称和 P&L
+        """
+        await self.page.wait_for_selector('.style_tableRow__gbjWO', timeout=10000)
 
+        rows = await self.page.locator('.style_tableRow__gbjWO').all()
+        results = []
+
+        for row in rows:
+            try:
+                cells = await row.locator('[data-sentry-element="CellWrapper"]').all()
+
+                product = await cells[0].locator('[data-sentry-component="InstrumentCellLink"]').inner_text()
+                pnl = await cells[10].inner_text()
+
+                results.append({
+                    'product': product.strip(),
+                    'pnl': pnl.strip()
+                })
+
+            except Exception as e:
+                print(f"解析行数据时出错: {e}")
+                continue
+
+        return results
 
     # ==================== 止盈止损相关 ====================
 
