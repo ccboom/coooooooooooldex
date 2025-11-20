@@ -55,12 +55,12 @@ class GrvtTradingBot:
                             return price
 
                 print("  未找到有效买价，重试...")
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
             except Exception as e:
                 print(f"  获取买价出错: {e}")
                 if attempt < max_attempts - 1:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)
 
         print(f"✗ 获取买价失败")
         return None
@@ -106,12 +106,12 @@ class GrvtTradingBot:
                             return price
 
                 print("  未找到有效卖价，重试...")
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
             except Exception as e:
                 print(f"  获取卖价出错: {e}")
                 if attempt < max_attempts - 1:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)
 
         print(f"✗ 获取卖价失败")
         return None
@@ -137,7 +137,7 @@ class GrvtTradingBot:
                     timeout=10000
                 )
 
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
                 # 获取最低卖价（红色，可见的第一个）
                 ask_price = None
@@ -201,12 +201,12 @@ class GrvtTradingBot:
                     return bid_price, ask_price
 
                 print("  未能获取有效价格，重试...")
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
             except Exception as e:
                 print(f"  获取价格出错: {e}")
                 if attempt < max_attempts - 1:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)
 
         print(f"✗ 获取订单簿价格失败")
         return None, None
@@ -254,7 +254,7 @@ class GrvtTradingBot:
                 'xpath=ancestor::span[contains(@class, "text-field_prefix")]')
             await leverage_button.wait_for(state="visible", timeout=self.timeout)
             await leverage_button.click()
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             # 验证对话框是否打开
             dialog = self.page.locator('.style_contentWrapper__JrKWn:has-text("Adjust Leverage")')
@@ -280,7 +280,7 @@ class GrvtTradingBot:
             confirm_button = dialog.locator('button:has-text("Confirm")')
             await confirm_button.click()
             print("✓ 已确认杠杆设置")
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             # 4. 验证是否设置成功
             current_leverage = await self.get_current_leverage()
@@ -448,7 +448,7 @@ class GrvtTradingBot:
                     if await self.page.get_by_role("button", name="Sign with SecureKey").count() > 0:
                         await self.page.get_by_role("button", name="Sign with SecureKey").click()
                     print("✓ 已点击下单")
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)
             except:
                 pass
 
@@ -483,7 +483,7 @@ class GrvtTradingBot:
                     if await self.page.get_by_role("button", name="Sign with SecureKey").count() > 0:
                         await self.page.get_by_role("button", name="Sign with SecureKey").click()
                     print("✓ 已点击下单")
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)
             except:
                 pass
 
@@ -614,7 +614,7 @@ class GrvtTradingBot:
             positions_tab = self.page.locator('.style_tabItem__eQp4d:has-text("Positions")').first
             await positions_tab.wait_for(state="visible", timeout=self.timeout)
             await positions_tab.click()
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.3)
 
             # 检查是否显示 "No results"
             no_results = self.page.locator('div:has-text("No results")')
@@ -672,7 +672,7 @@ class GrvtTradingBot:
             positions_tab = self.page.locator('.style_tabItem__eQp4d:has-text("Positions")').first
             # self.page.locator('.style_tabItem__eQp4d:has-text("Open orders")').first
             await positions_tab.click()
-            await asyncio.sleep(2)
+            await asyncio.sleep(0.5)
 
             # 获取持仓行
             position_rows = await self.page.locator(
@@ -716,7 +716,7 @@ class GrvtTradingBot:
 
             await limit_button.wait_for(state="visible", timeout=self.timeout)
             await limit_button.click()
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             # 验证对话框是否打开
             close_dialog = self.page.locator('.style_contentWrapper__JrKWn')
@@ -741,7 +741,7 @@ class GrvtTradingBot:
 
             await market_button.wait_for(state="visible", timeout=self.timeout)
             await market_button.click()
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             # 验证对话框是否打开
             close_dialog = self.page.locator('.style_contentWrapper__JrKWn')
@@ -762,7 +762,7 @@ class GrvtTradingBot:
         """
         try:
             print(f"填写限价平仓价格: {price}")
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             # 填写价格
             order_price_input = self.page.locator('input[placeholder="Enter Order price"]')
@@ -896,7 +896,7 @@ class GrvtTradingBot:
             close_all_button = self.page.locator('button:has-text("Close all positions")')
             if await close_all_button.count() > 0:
                 await close_all_button.click()
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
                 # 确认对话框
                 confirm_button = self.page.locator('button:has-text("Confirm")')
@@ -956,7 +956,7 @@ class GrvtTradingBot:
             print(f"❌ 检查挂单时出错: {e}")
             return -1
 
-    async def cancel_order(self, order_id: str = None, row_index: int = None) -> bool:
+    async def cancel_order(self, order_id: str = None, row_index: int = None) -> int:
         """
         取消单个订单
 
@@ -972,6 +972,12 @@ class GrvtTradingBot:
             print(f"开始取消订单: {order_id if order_id else f'第{row_index + 1}行'}")
             print("=" * 60)
 
+            position_count = await self.check_positions(show_details=False)
+
+            if position_count > 0:
+                print(f"✅ GRVT订单已成交（等待 X 秒）")
+                return 1
+
             # 切换到未结订单标签
             open_orders_tab = self.page.locator('.style_tabItem__eQp4d:has-text("Open orders")').first
 
@@ -980,19 +986,19 @@ class GrvtTradingBot:
 
             if tab_count == 0:
                 print("✗ 未找到未结订单标签")
-                return False
+                return 2
 
             # 检查是否已激活（通过 class 判断）
             tab_class = await open_orders_tab.get_attribute('class')
             if 'style_active__ex4rC' not in tab_class:
                 await open_orders_tab.click()
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
                 print("✓ 已切换到未结订单标签")
             else:
                 print("✓ 未结订单标签已激活")
 
             # 等待订单表格加载（直接定位表格容器）
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             # 查找订单表格行
             table_rows = self.page.locator('div.style_tableRow__gbjWO')
@@ -1000,7 +1006,7 @@ class GrvtTradingBot:
 
             if row_count == 0:
                 print("✗ 未结订单列表为空")
-                return False
+                return 2
 
             print(f"✓ 找到 {row_count} 个未结订单")
 
@@ -1014,7 +1020,7 @@ class GrvtTradingBot:
                     print(f"✓ 选择第 {row_index + 1} 行订单")
                 else:
                     print(f"✗ 索引 {row_index} 超出范围（共 {row_count} 行）")
-                    return False
+                    return 2
 
             elif order_id:
                 # 按订单ID查找
@@ -1032,17 +1038,17 @@ class GrvtTradingBot:
 
                 if target_row is None:
                     print(f"✗ 未找到订单ID包含 '{order_id}' 的订单")
-                    return False
+                    return 2
             else:
                 print("✗ 必须指定 order_id 或 row_index")
-                return False
+                return 2
 
             # 在目标行中查找 Cancel 按钮
             cancel_button = target_row.locator('button:has-text("Cancel")').last
 
             if await cancel_button.count() == 0:
                 print("✗ 未找到 Cancel 按钮")
-                return False
+                return 2
 
             # 确保按钮可见并可点击
             await cancel_button.scroll_into_view_if_needed()
@@ -1050,17 +1056,17 @@ class GrvtTradingBot:
 
             if not await cancel_button.is_visible():
                 print("✗ Cancel 按钮不可见")
-                return False
+                return 2
 
             if not await cancel_button.is_enabled():
                 print("✗ Cancel 按钮不可用")
-                return False
+                return 2
 
             # 点击 Cancel 按钮
             await cancel_button.click()
             print("✓ 已点击 Cancel 按钮")
 
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             # 验证订单是否已取消（检查行数是否减少）
             new_row_count = await self.page.locator('div.style_tableRow__gbjWO').count()
@@ -1074,7 +1080,7 @@ class GrvtTradingBot:
             print("✅ 取消订单操作完成")
             print("=" * 60 + "\n")
 
-            return True
+            return 3
 
         except Exception as e:
             print(f"✗ 取消订单失败: {e}")
@@ -1082,114 +1088,128 @@ class GrvtTradingBot:
             traceback.print_exc()
             return False
 
-    async def cancel_all_orders(self) -> bool:
+    async def cancel_all_orders(self, order_id: str = None, row_index: int = None)  -> int:
         """
-        取消所有未结订单
+                取消单个订单
 
-        Returns:
-            bool: 操作是否成功
+                Args:
+                    order_id: 订单ID（部分匹配即可）
+                    row_index: 订单在表格中的行索引（从0开始）
+
+                Returns:
+                    bool: 操作是否成功
         """
         try:
             print("\n" + "=" * 60)
-            print("开始取消所有订单")
+            print(f"开始取消订单: {order_id if order_id else f'第{row_index + 1}行'}")
             print("=" * 60)
 
             # 切换到未结订单标签
-            open_orders_tab = self.page.locator(
-                'button[role="tab"]:has-text("Open orders")'
-            ).first
+            open_orders_tab = self.page.locator('.style_tabItem__eQp4d:has-text("Open orders")').first
 
-            if await open_orders_tab.count() == 0:
+            tab_count = await open_orders_tab.count()
+            print(f"找到 {tab_count} 个 Open orders 标签")
+
+            if tab_count == 0:
                 print("✗ 未找到未结订单标签")
-                return False
+                return 2
 
-            if await open_orders_tab.get_attribute('aria-selected') != 'true':
+            # 检查是否已激活（通过 class 判断）
+            tab_class = await open_orders_tab.get_attribute('class')
+            if 'style_active__ex4rC' not in tab_class:
                 await open_orders_tab.click()
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
                 print("✓ 已切换到未结订单标签")
+            else:
+                print("✓ 未结订单标签已激活")
 
-            # 等待订单面板加载
-            orders_panel = self.page.locator(
-                'div[role="tabpanel"][id*="open-orders"][data-state="active"]'
-            ).first
+            # 等待订单表格加载（直接定位表格容器）
+            await asyncio.sleep(0.5)
 
-            await expect(orders_panel).to_be_visible(timeout=5000)
+            # 查找订单表格行
+            table_rows = self.page.locator('div.style_tableRow__gbjWO')
+            row_count = await table_rows.count()
 
-            # 查找 "Cancel all orders" 按钮
-            cancel_all_button = self.page.locator(
-                'button:has-text("Cancel all orders")'
-            ).first
+            if row_count == 0:
+                print("✗ 未结订单列表为空")
+                return 2
 
-            if await cancel_all_button.count() == 0:
-                print("✗ 未找到 Cancel all orders 按钮")
-                return False
+            print(f"✓ 找到 {row_count} 个未结订单")
 
-            # 检查按钮是否可用
-            if not await cancel_all_button.is_enabled():
-                print("⚠️  Cancel all orders 按钮不可用（可能没有待取消的订单）")
-                return True
+            target_row = None
 
-            await expect(cancel_all_button).to_be_visible(timeout=5000)
-            await expect(cancel_all_button).to_be_enabled(timeout=5000)
+            # 根据参数查找目标订单行
+            if row_index is not None:
+                # 按行索引查找
+                if row_index < row_count:
+                    target_row = table_rows.nth(row_index)
+                    print(f"✓ 选择第 {row_index + 1} 行订单")
+                else:
+                    print(f"✗ 索引 {row_index} 超出范围（共 {row_count} 行）")
+                    return 2
 
-            # 获取当前订单数量
-            table_rows = orders_panel.locator('div.style_tableRow__gbjWO')
-            initial_count = await table_rows.count()
-            print(f"  当前有 {initial_count} 个未结订单")
+            elif order_id:
+                # 按订单ID查找
+                for i in range(row_count):
+                    row = table_rows.nth(i)
+                    # 查找包含订单ID的单元格
+                    order_id_cell = row.locator('.oneline-text').first
 
-            # 点击按钮
-            await cancel_all_button.scroll_into_view_if_needed()
+                    if await order_id_cell.count() > 0:
+                        cell_text = await order_id_cell.text_content()
+                        if order_id in cell_text:
+                            target_row = row
+                            print(f"✓ 找到订单ID匹配的订单（第 {i + 1} 行）: {cell_text[:20]}...")
+                            break
+
+                if target_row is None:
+                    print(f"✗ 未找到订单ID包含 '{order_id}' 的订单")
+                    return 2
+            else:
+                print("✗ 必须指定 order_id 或 row_index")
+                return 2
+
+            # 在目标行中查找 Cancel 按钮
+            cancel_button = target_row.locator('button:has-text("Cancel")').last
+
+            if await cancel_button.count() == 0:
+                print("✗ 未找到 Cancel 按钮")
+                return 2
+
+            # 确保按钮可见并可点击
+            await cancel_button.scroll_into_view_if_needed()
             await asyncio.sleep(0.3)
 
-            await cancel_all_button.click()
-            print("✓ 已点击 Cancel all orders 按钮")
+            if not await cancel_button.is_visible():
+                print("✗ Cancel 按钮不可见")
+                return 2
 
-            # 可能会有确认弹窗，需要处理
-            await asyncio.sleep(1)
+            if not await cancel_button.is_enabled():
+                print("✗ Cancel 按钮不可用")
+                return 2
 
-            # 检查是否有确认对话框
-            confirm_dialog = self.page.locator('div[role="dialog"]').first
-            if await confirm_dialog.count() > 0 and await confirm_dialog.is_visible():
-                print("  检测到确认对话框")
+            # 点击 Cancel 按钮
+            await cancel_button.click()
+            print("✓ 已点击 Cancel 按钮")
 
-                # 查找确认按钮（可能是 "Confirm"、"Yes"、"确认" 等）
-                confirm_btn = confirm_dialog.locator(
-                    'button:has-text("Confirm"), button:has-text("Yes"), button:has-text("确认")'
-                ).first
+            await asyncio.sleep(0.5)
 
-                if await confirm_btn.count() > 0:
-                    await confirm_btn.click()
-                    print("✓ 已点击确认按钮")
-                    await asyncio.sleep(1)
+            # 验证订单是否已取消（检查行数是否减少）
+            new_row_count = await self.page.locator('div.style_tableRow__gbjWO').count()
 
-            # 等待并验证订单是否已全部取消
-            import time
-            end_time = time.time() + 10
-
-            while time.time() < end_time:
-                current_count = await table_rows.count()
-
-                if current_count == 0:
-                    print("✓ 所有订单已取消")
-                    break
-
-                print(f"  等待订单取消... (剩余 {current_count} 个)")
-                await asyncio.sleep(1)
+            if new_row_count < row_count:
+                print(f"✓ 订单已取消（剩余 {new_row_count} 个订单）")
             else:
-                final_count = await table_rows.count()
-                if final_count < initial_count:
-                    print(f"✓ 部分订单已取消（剩余 {final_count} 个）")
-                else:
-                    print("⚠️  订单取消状态未确认")
+                print("⚠️  订单可能已取消（等待确认）")
 
             print("=" * 60)
-            print("✅ 取消所有订单操作完成")
+            print("✅ 取消订单操作完成")
             print("=" * 60 + "\n")
 
-            return True
+            return 3
 
         except Exception as e:
-            print(f"✗ 取消所有订单失败: {e}")
+            print(f"✗ 取消订单失败: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -1215,7 +1235,7 @@ class GrvtTradingBot:
 
             if await open_orders_tab.get_attribute('aria-selected') != 'true':
                 await open_orders_tab.click()
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
             # 等待订单面板加载
             orders_panel = self.page.locator(
@@ -1293,7 +1313,7 @@ class GrvtTradingBot:
             # 切换到 Positions 标签
             positions_tab = self.page.locator('.style_tabItem__eQp4d:has-text("Positions")').first
             await positions_tab.click()
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             # 获取持仓行
             position_rows = self.page.locator(
@@ -1351,7 +1371,7 @@ class GrvtTradingBot:
             # 切换到 Positions 标签
             positions_tab = self.page.locator('.style_tabItem__eQp4d:has-text("Positions")').first
             await positions_tab.click()
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             # 获取持仓行
             position_rows = self.page.locator(
@@ -1384,7 +1404,7 @@ class GrvtTradingBot:
             await asyncio.sleep(0.3)
             await edit_button.click()
             print("✓ 已点击编辑 TP/SL 按钮")
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             # 验证对话框是否打开
             dialog = self.page.locator('.style_contentWrapper__JrKWn:has-text("Edit TP/SL")')
@@ -1423,7 +1443,7 @@ class GrvtTradingBot:
             # 等待对话框加载
             dialog = self.page.locator('.style_contentWrapper__JrKWn:has-text("Edit TP/SL")')
             await expect(dialog).to_be_visible(timeout=5000)
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             # 填写止盈 (Take profit)
             if tp_roi is not None:
@@ -1521,7 +1541,7 @@ class GrvtTradingBot:
 
             await confirm_button.click()
             print("✓ 已点击 Confirm 按钮")
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
             return True
 
@@ -1666,14 +1686,14 @@ class GrvtTradingBot:
             for i in range(position_count):
                 print(f"\n处理持仓 {i + 1}/{position_count}...")
 
-                if await self.set_position_tpsl(i, tp_roi, sl_roi):
-                    success_count += 1
-                    print(f"✓ 持仓 {i + 1} 设置成功")
-                else:
-                    print(f"✗ 持仓 {i + 1} 设置失败")
+                # if await self.set_position_tpsl(i, tp_roi, sl_roi):
+                #     success_count += 1
+                #     print(f"✓ 持仓 {i + 1} 设置成功")
+                # else:
+                #     print(f"✗ 持仓 {i + 1} 设置失败")
 
                 # 等待一下再处理下一个
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
             print("\n" + "=" * 60)
             print(f"✅ 批量设置完成: {success_count}/{position_count} 成功")
