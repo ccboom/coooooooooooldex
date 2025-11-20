@@ -78,6 +78,8 @@ class HedgeTradingBot:
                 self.get_paradex_mid_price()
             )
 
+
+
             if grvt_price is None or paradex_price is None:
                 print("❌ 无法获取完整价格信息")
                 return None, None, None
@@ -95,6 +97,9 @@ class HedgeTradingBot:
         except Exception as e:
             print(f"❌ 获取价格差异失败: {e}")
             return None, None, None
+
+
+
 
     async def execute_hedge_grvt_short_paradex_long(self, grvt_price: float) -> bool:
         """
@@ -237,23 +242,60 @@ class HedgeTradingBot:
             check_count = 0
             while True:
                 check_count += 1
-                grvt_price, paradex_price, price_diff = await self.get_price_difference()
 
-                if grvt_price is None or paradex_price is None or price_diff is None:
-                    print(f"❌ 无法获取价格信息（第{check_count}次检查），等待20秒后重试...")
+                try:
+                    # 获取 GRVT 的 P&L
+                    grvt_positions = await self.grvt_bot.get_simple_pnl_async()
+
+                    # 获取 Paradex 的 P&L
+                    paradex_positions = await self.paradex_trader.get_total_upnl_async()
+
+                    # 解析 GRVT P&L
+                    grvt_pnl_total = 0.0
+                    if grvt_positions:
+                        for pos in grvt_positions:
+                            pnl_str = pos['pnl'].replace('$', '').replace(',', '').strip()
+                            try:
+                                grvt_pnl_total += float(pnl_str)
+                            except ValueError:
+                                print(f"⚠️ 无法解析 GRVT P&L: {pos['pnl']}")
+
+                    # 解析 Paradex P&L
+                    paradex_pnl_total = 0.0
+                    if paradex_positions:
+                        for pos in paradex_positions:
+                            upnl_str = pos['upnl_value'].replace('$', '').replace('+', '').replace(',', '').strip()
+                            try:
+                                paradex_pnl_total += float(upnl_str)
+                            except ValueError:
+                                print(f"⚠️ 无法解析 Paradex P&L: {pos['upnl_value']}")
+
+                    # 计算总盈亏
+                    total_pnl = grvt_pnl_total + paradex_pnl_total
+                    abs_total_pnl = abs(total_pnl)
+
+                    print(f"\n第{check_count}次检查:")
+                    print(f"  GRVT P&L:    ${grvt_pnl_total:>10.2f}")
+                    print(f"  Paradex P&L: ${paradex_pnl_total:>10.2f}")
+                    print(f"  {'─' * 30}")
+                    print(f"  总盈亏:      ${total_pnl:>10.2f}")
+                    print(f"  盈亏绝对值:  ${abs_total_pnl:>10.2f}")
+
+                    # 检查盈亏绝对值是否在阈值内
+                    if abs_total_pnl <= max_price_diff:
+                        print(f"✅ 盈亏在合理范围内（${abs_total_pnl:.2f} <= ${max_price_diff}），可以执行平仓")
+                        break
+                    else:
+                        print(f"⚠️ 盈亏差距过大（${abs_total_pnl:.2f} > ${max_price_diff}）")
+                        print(f"   等待20秒后重新检查...")
+                        await asyncio.sleep(20)
+
+                except Exception as e:
+                    print(f"❌ 获取盈亏信息失败（第{check_count}次检查）: {e}")
+                    print(f"   等待20秒后重试...")
                     await asyncio.sleep(20)
                     continue
 
-                # 检查价差绝对值
-                abs_price_diff = abs(price_diff)
-
-                if abs_price_diff <= max_price_diff:
-                    print(f"✅ 价差合理（${abs_price_diff:.5f} <= ${max_price_diff}），可以执行平仓")
-                    break
-                else:
-                    print(f"⚠️ 价差过大（${abs_price_diff:.5f} > ${max_price_diff}）")
-                    print(f"   第{check_count}次检查，等待20秒后重新检查...")
-                    await asyncio.sleep(20)
 
             # ==================== 第一步：检查并平仓 GRVT 持仓 ====================
             grvt_positions = await self.grvt_bot.get_position_list()
@@ -616,4 +658,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
