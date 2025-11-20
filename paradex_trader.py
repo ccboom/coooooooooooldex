@@ -1247,5 +1247,41 @@ class ParadexTrader:
         print("=" * 60 + "\n")
         return True
 
+    async def get_total_upnl_async(self) -> List[Dict[str, str]]:
+        """
+        异步获取持仓表格中所有订单的 Total UP&L 数据
+        """
+        # 等待表格加载
+        await self.page.wait_for_selector('table.table__StyledTable-sc-1ay5exl-1', timeout=10000)
+
+        # 获取所有持仓行
+        rows = await self.page.locator('table tbody tr').all()
+
+        results = []
+        for row in rows:
+            try:
+                # 获取市场名称
+                market_text = await row.locator('td:nth-child(1) a').inner_text()
+                market = market_text.split('\n')[0]
+
+                # 获取 Total UP&L 列
+                upnl_cell = row.locator('td:nth-child(8) button')
+
+                # 获取具体的值和百分比
+                spans = await upnl_cell.locator('span.atoms__ValueChange-ljyvt7-1').all()
+
+                upnl_value = await spans[0].inner_text() if len(spans) > 0 else 'N/A'
+                upnl_percent = await spans[1].inner_text() if len(spans) > 1 else 'N/A'
+
+                results.append({
+                    'market': market,
+                    'upnl_value': upnl_value,
+                    'upnl_percent': upnl_percent
+                })
+            except Exception as e:
+                print(f"解析行数据时出错: {e}")
+                continue
+
+        return results
 
 
