@@ -79,7 +79,6 @@ class HedgeTradingBot:
             )
 
 
-
             if grvt_price is None or paradex_price is None:
                 print("❌ 无法获取完整价格信息")
                 return None, None, None
@@ -220,13 +219,13 @@ class HedgeTradingBot:
             traceback.print_exc()
             return False
 
-    async def close_existing_positions(self, max_price_diff: float = 1.0) -> bool:
+    async def close_existing_positions(self, max_price_diff: float = 0.5) -> bool:
         """
         关闭现有的 GRVT 和 Paradex 持仓
         在平仓前会检查价差，如果价差过大会等待
 
         Args:
-            max_price_diff: 允许的最大价差（绝对值），默认为1.0美元
+            max_price_diff: 允许的最大价差（绝对值），默认为0.5美元
 
         GRVT: 通过开相反方向的仓位来平仓（多单->开空，空单->开多）
         Paradex: 市价平仓
@@ -245,6 +244,7 @@ class HedgeTradingBot:
 
                 try:
                     # 获取 GRVT 的 P&L
+                    print(1)
                     grvt_positions = await self.grvt_bot.get_simple_pnl_async()
 
                     # 获取 Paradex 的 P&L
@@ -269,7 +269,7 @@ class HedgeTradingBot:
                                 paradex_pnl_total += float(upnl_str)
                             except ValueError:
                                 print(f"⚠️ 无法解析 Paradex P&L: {pos['upnl_value']}")
-
+                    print(2)
                     # 计算总盈亏
                     total_pnl = grvt_pnl_total + paradex_pnl_total
                     abs_total_pnl = abs(total_pnl)
@@ -289,7 +289,7 @@ class HedgeTradingBot:
                         print(f"⚠️ 盈亏差距过大（${abs_total_pnl:.2f} > ${max_price_diff}）")
                         print(f"   等待20秒后重新检查...")
                         await asyncio.sleep(20)
-
+                    print(3)
                 except Exception as e:
                     print(f"❌ 获取盈亏信息失败（第{check_count}次检查）: {e}")
                     print(f"   等待20秒后重试...")
