@@ -950,7 +950,7 @@ class ParadexTrader:
             await market_close_button.click()
             print("✓ 已点击市场平仓按钮")
 
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.2)
 
             # 等待弹窗出现
             print("等待平仓确认弹窗...")
@@ -996,7 +996,7 @@ class ParadexTrader:
                 await confirm_button.click()
                 print(f"✓ 已点击 {button_text} 按钮")
 
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(1)
 
                 if not await modal_title.is_visible():
                     print("✓ 弹窗已关闭，平仓操作已提交")
@@ -1251,6 +1251,11 @@ class ParadexTrader:
         """
         异步获取持仓表格中所有订单的 Total UP&L 数据
         """
+        positions_tab = self.page.locator(
+            'button[role="tab"]:has-text("位置"), button[role="tab"]:has-text("持仓")'
+        ).first
+
+        await positions_tab.click()
         # 等待表格加载
         await self.page.wait_for_selector('table.table__StyledTable-sc-1ay5exl-1', timeout=10000)
 
@@ -1260,6 +1265,7 @@ class ParadexTrader:
         results = []
         for row in rows:
             try:
+
                 # 获取市场名称
                 market_text = await row.locator('td:nth-child(1) a').inner_text()
                 market = market_text.split('\n')[0]
