@@ -1298,6 +1298,13 @@ class GrvtTradingBot:
         """
         异步简化版本：只获取产品名称和 P&L
         """
+
+        positions_tab = self.page.locator('.style_tabItem__eQp4d:has-text("Positions")').first
+        await positions_tab.wait_for(state="visible", timeout=self.timeout)
+        await positions_tab.click()
+        await asyncio.sleep(0.3)
+
+
         await self.page.wait_for_selector('.style_tableRow__gbjWO', timeout=10000)
 
         rows = await self.page.locator('.style_tableRow__gbjWO').all()
